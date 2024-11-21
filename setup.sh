@@ -1,22 +1,87 @@
 #!/bin/bash
+# Fail on any error and undefined variables
+set -eu
+
+# Version
+VERSION="1.0.0"
+SCRIPT_NAME=$(basename "$0")
+GITHUB_RAW_URL="https://raw.githubusercontent.com/med-and-beyond/setup/refs/heads/main/setup.sh"
+
+# Add color codes using tput (check if tput exists first)
+if command -v tput >/dev/null 2>&1; then
+    RED=$(tput setaf 1)
+    GREEN=$(tput setaf 2)
+    YELLOW=$(tput setaf 3)
+    RESET=$(tput sgr0)
+else
+    RED=''
+    GREEN=''
+    YELLOW=''
+    RESET=''
+fi
+
+# Error handling
+error() {
+    echo "${RED}❌ Error: $1${RESET}" >&2
+    exit 1
+}
+
+warn() {
+    echo "${YELLOW}⚠️  Warning: $1${RESET}" >&2
+}
+
+success() {
+    echo "${GREEN}✅ $1${RESET}"
+}
+
+# Trap errors
+trap 'error "An error occurred on line $LINENO. Command: $BASH_COMMAND"' ERR
+
+# Check if running as root
+check_not_root() {
+    if [ "$(id -u)" -eq 0 ]; then
+        error "Do not run this script as root/sudo"
+    fi
+}
+
+# Check for minimum required commands
+check_requirements() {
+    local missing_req=0
+    for cmd in curl grep sed chmod mkdir; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            warn "Required command not found: $cmd"
+            missing_req=1
+        fi
+    done
+
+    if [ $missing_req -eq 1 ]; then
+        error "Please install missing requirements before continuing"
+    fi
+}
 
 # Function to display usage
 usage() {
     cat << EOF
-Usage: $0 [OPTIONS]
+Usage: curl -fsSL ${GITHUB_RAW_URL} | bash -s -- [OPTIONS]
 
 A utility to manage development environment setup for MacOS.
+Version: ${VERSION}
 
 Options:
     -h, --help          Show this help message
     -c, --certification Check and notify what tools are missing
     -i, --install       Install all required tools
+    -v, --version       Show version information
 
 Examples:
-    $0 --help           # Show this help message
-    $0 --certification  # Check what tools are missing
-    $0 --install       # Install all required tools
-    $0 -c -i           # Check and install in one command
+    # Check what tools are missing:
+    curl -fsSL ${GITHUB_RAW_URL} | bash -s -- --certification
+
+    # Install all tools:
+    curl -fsSL ${GITHUB_RAW_URL} | bash -s -- --install
+
+    # Both check and install:
+    curl -fsSL ${GITHUB_RAW_URL} | bash -s -- -c -i
 
 This script will manage the installation and verification of:
     - Homebrew
@@ -27,10 +92,26 @@ This script will manage the installation and verification of:
     - Twingate
     - Google Cloud SDK
     - gkc.sh utility
+    - GitHub CLI
+    - Security tools (SentinelOne, Automox, NordPass)
 
 Note: This script is intended for MacOS only.
 EOF
     exit 1
+}
+
+# Version information
+version() {
+    echo "Version: ${VERSION}"
+    exit 0
+}
+
+# OS check
+check_os() {
+    if [[ "$OSTYPE" != "darwin"* ]]; then
+        error "This script requires MacOS. Current OS: $OSTYPE"
+    fi
+    success "Running on MacOS"
 }
 
 # Function to check if an application exists in Applications folders
@@ -315,52 +396,62 @@ do_installation() {
 RED=$(tput setaf 1)
 RESET=$(tput sgr0)
 
-# Check if no arguments were provided
-if [ $# -eq 0 ]; then
-    usage
-    exit 0
-fi
+# Main execution
+main() {
+    # Initial checks
+    check_not_root
+    check_requirements
+    check_os
 
-# Parse command line options
-while getopts "hci-:" opt; do
-    case "${opt}" in
-        h)
-            usage
-            ;;
-        c)
-            do_certification
-            ;;
-        i)
-            do_installation
-            ;;
-        -)
-            case "${OPTARG}" in
-                help)
-                    usage
-                    ;;
-                certification)
-                    do_certification
-                    ;;
-                install)
-                    do_installation
-                    ;;
-                *)
-                    echo "Invalid option: --${OPTARG}" >&2
-                    usage
-                    ;;
-            esac
-            ;;
-        ?)
-            usage
-            ;;
-    esac
-done
+    # If no arguments provided when running directly (not piped)
+    if [ -t 0 ] && [ $# -eq 0 ]; then
+        usage
+        exit 0
+    fi
 
-# Remove processed options
-shift $((OPTIND-1))
+    local CERTIFICATION=0
+    local INSTALLATION=0
 
-# If there are remaining arguments, show usage
-if [ $# -gt 0 ]; then
-    echo "Error: Unknown argument(s): $@"
-    usage
+    # Process options
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -h|--help)
+                usage
+                ;;
+            -v|--version)
+                version
+                ;;
+            -c|--certification)
+                CERTIFICATION=1
+                shift
+                ;;
+            -i|--install)
+                INSTALLATION=1
+                shift
+                ;;
+            *)
+                error "Unknown option: $1"
+                ;;
+        esac
+    done
+
+    # Execute requested operations
+    if [ $CERTIFICATION -eq 1 ]; then
+        do_certification
+    fi
+
+    if [ $INSTALLATION -eq 1 ]; then
+        do_installation
+    fi
+
+    # If no operation was selected
+    if [ $CERTIFICATION -eq 0 ] && [ $INSTALLATION -eq 0 ]; then
+        warn "No operation selected"
+        usage
+    fi
+}
+
+# Ensure the script is being sourced properly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
 fi
