@@ -242,9 +242,9 @@ do_certification() {
     check_automox || ((missing_tools++))
     check_app_installation "nordpass" "NordPass" "NordPass" || ((missing_tools++))
 
-    # Check for TeamViewer (should not be installed)
-    if [ -d "/Applications/TeamViewer.app" ] || [ -d "$HOME/Applications/TeamViewer.app" ]; then
-        echo "${RED}⚠️  WARNING: TeamViewer is installed and should be removed for security reasons${RESET}"
+    echo -e "\n🔒 Checking Security:"
+    check_forbidden_apps
+    if [ $? -eq 1 ]; then
         ((security_warnings++))
     fi
 
@@ -357,16 +357,7 @@ do_installation() {
         sudo ln -sf "${HOME}/Applications/google-cloud-sdk/bin/gkc.sh" /usr/local/bin/gkc.sh
     fi
 
-    # Check for TeamViewer and warn if present
-    if [ -d "/Applications/TeamViewer.app" ] || [ -d "${HOME}/Applications/TeamViewer.app" ]; then
-        echo -e "\n⚠️  WARNING: TeamViewer is installed and should be removed for security reasons"
-        echo "Please uninstall TeamViewer manually using the following steps:"
-        echo "1. Quit TeamViewer if it's running"
-        echo "2. Open Finder"
-        echo "3. Go to Applications"
-        echo "4. Drag TeamViewer to the Trash"
-        echo "5. Empty the Trash"
-    fi
+    remove_forbidden_apps
 
     echo -e "\n✅ MacOS setup complete!"
     echo "Please restart your terminal to ensure all changes take effect"
@@ -392,9 +383,62 @@ do_installation() {
 
 }
 
+# Function to check for forbidden applications
+check_forbidden_apps() {
+    local forbidden_found=0
+
+    echo -e "\n🔍 Checking for forbidden applications:"
+
+    for app_info in "${FORBIDDEN_APPS[@]}"; do
+        IFS=":" read -r app_name app_reason <<< "$app_info"
+
+        # Check both system and user Applications folders
+        if [ -d "/Applications/${app_name}.app" ] || [ -d "${HOME}/Applications/${app_name}.app" ]; then
+            echo -e "${RED}⚠️  WARNING: ${app_name} found - ${app_reason}${RESET}"
+            forbidden_found=1
+        fi
+    done
+
+    return $forbidden_found
+}
+
+# Function to guide removal of forbidden applications
+remove_forbidden_apps() {
+    local any_found=0
+
+    echo -e "\n🗑️  Checking for applications that need removal:"
+
+    for app_info in "${FORBIDDEN_APPS[@]}"; do
+        IFS=":" read -r app_name app_reason <<< "$app_info"
+
+        if [ -d "/Applications/${app_name}.app" ] || [ -d "${HOME}/Applications/${app_name}.app" ]; then
+            echo -e "${RED}Found ${app_name}${RESET}"
+            echo "Please remove it following these steps:"
+            echo "1. Quit ${app_name} if it's running"
+            echo "2. Open Finder"
+            echo "3. Go to Applications"
+            echo "4. Drag ${app_name} to the Trash"
+            echo "5. Empty the Trash"
+            echo ""
+            any_found=1
+        fi
+    done
+
+    if [ $any_found -eq 0 ]; then
+        echo "✅ No forbidden applications found"
+    fi
+}
+
 # Add color codes using tput
 RED=$(tput setaf 1)
 RESET=$(tput sgr0)
+
+# Array of applications that should not be installed
+FORBIDDEN_APPS=(
+    "TeamViewer:TeamViewer is a security risk and should be removed"
+    "FortiClient:FortiClient VPN should be removed in favor of Twingate"
+    "AnyDesk:AnyDesk is a security risk and should be removed"
+)
 
 # Main execution
 main() {
