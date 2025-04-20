@@ -1,87 +1,22 @@
 #!/bin/bash
-# Fail on any error and undefined variables
-set -eu
-
-# Version
-VERSION="1.0.0"
-SCRIPT_NAME=$(basename "$0")
-GITHUB_RAW_URL="https://raw.githubusercontent.com/med-and-beyond/setup/refs/heads/main/setup.sh"
-
-# Add color codes using tput (check if tput exists first)
-if command -v tput >/dev/null 2>&1; then
-    RED=$(tput setaf 1)
-    GREEN=$(tput setaf 2)
-    YELLOW=$(tput setaf 3)
-    RESET=$(tput sgr0)
-else
-    RED=''
-    GREEN=''
-    YELLOW=''
-    RESET=''
-fi
-
-# Error handling
-error() {
-    echo "${RED}❌ Error: $1${RESET}" >&2
-    exit 1
-}
-
-warn() {
-    echo "${YELLOW}⚠️  Warning: $1${RESET}" >&2
-}
-
-success() {
-    echo "${GREEN}✅ $1${RESET}"
-}
-
-# Trap errors
-trap 'error "An error occurred on line $LINENO. Command: $BASH_COMMAND"' ERR
-
-# Check if running as root
-check_not_root() {
-    if [ "$(id -u)" -eq 0 ]; then
-        error "Do not run this script as root/sudo"
-    fi
-}
-
-# Check for minimum required commands
-check_requirements() {
-    local missing_req=0
-    for cmd in curl grep sed chmod mkdir; do
-        if ! command -v "$cmd" >/dev/null 2>&1; then
-            warn "Required command not found: $cmd"
-            missing_req=1
-        fi
-    done
-
-    if [ $missing_req -eq 1 ]; then
-        error "Please install missing requirements before continuing"
-    fi
-}
 
 # Function to display usage
 usage() {
     cat << EOF
-Usage: curl -fsSL ${GITHUB_RAW_URL} | bash -s -- [OPTIONS]
+Usage: $0 [OPTIONS]
 
 A utility to manage development environment setup for MacOS.
-Version: ${VERSION}
 
 Options:
     -h, --help          Show this help message
     -c, --certification Check and notify what tools are missing
     -i, --install       Install all required tools
-    -v, --version       Show version information
 
 Examples:
-    # Check what tools are missing:
-    curl -fsSL ${GITHUB_RAW_URL} | bash -s -- --certification
-
-    # Install all tools:
-    curl -fsSL ${GITHUB_RAW_URL} | bash -s -- --install
-
-    # Both check and install:
-    curl -fsSL ${GITHUB_RAW_URL} | bash -s -- -c -i
+    $0 --help           # Show this help message
+    $0 --certification  # Check what tools are missing
+    $0 --install       # Install all required tools
+    $0 -c -i           # Check and install in one command
 
 This script will manage the installation and verification of:
     - Homebrew
@@ -92,26 +27,16 @@ This script will manage the installation and verification of:
     - Twingate
     - Google Cloud SDK
     - gkc.sh utility
-    - GitHub CLI
-    - Security tools (SentinelOne, Automox, NordPass)
+    - NordPass
+    - Cursor
+    - DBeaver Community
+    - Visual Studio Code
+    - Automox (verification only)
+    - SentinelOne (verification only)
 
 Note: This script is intended for MacOS only.
 EOF
     exit 1
-}
-
-# Version information
-version() {
-    echo "Version: ${VERSION}"
-    exit 0
-}
-
-# OS check
-check_os() {
-    if [[ "$OSTYPE" != "darwin"* ]]; then
-        error "This script requires MacOS. Current OS: $OSTYPE"
-    fi
-    success "Running on MacOS"
 }
 
 # Function to check if an application exists in Applications folders
@@ -121,10 +46,10 @@ check_application() {
 
     # Check in both system and user Applications folders
     if [ -d "/Applications/${app_name}.app" ] || [ -d "$HOME/Applications/${app_name}.app" ]; then
-        echo "✅ $display_name is installed"
+        echo "[OK] $display_name is installed"
         return 0
     else
-        echo "❌ $display_name is not installed"
+        echo "[MISSING] $display_name is not installed"
         return 1
     fi
 }
@@ -132,10 +57,10 @@ check_application() {
 # Function to check if a command exists
 check_command() {
     if ! command -v $1 &> /dev/null; then
-        echo "❌ $2 is not installed"
+        echo "[MISSING] $2 is not installed"
         return 1
     else
-        echo "✅ $2 is installed"
+        echo "[OK] $2 is installed"
         return 0
     fi
 }
@@ -148,14 +73,14 @@ check_app_installation() {
 
     # First check if installed via brew
     if brew list --cask $brew_name &>/dev/null; then
-        echo "✅ $display_name is installed (via Homebrew)"
+        echo "[OK] $display_name is installed (via Homebrew)"
         return 0
     # Then check in Applications folders
     elif [ -d "/Applications/${app_name}.app" ] || [ -d "$HOME/Applications/${app_name}.app" ]; then
-        echo "✅ $display_name is installed (via direct installation)"
+        echo "[OK] $display_name is installed (via direct installation)"
         return 0
     else
-        echo "❌ $display_name is not installed"
+        echo "[MISSING] $display_name is not installed"
         return 1
     fi
 }
@@ -164,10 +89,10 @@ check_app_installation() {
 # Function to check if a Homebrew cask is installed
 check_cask() {
     if ! brew list --cask $1 &>/dev/null; then
-        echo "❌ $2 is not installed"
+        echo "[MISSING] $2 is not installed"
         return 1
     else
-        echo "✅ $2 is installed"
+        echo "[OK] $2 is installed"
         return 0
     fi
 }
@@ -175,10 +100,10 @@ check_cask() {
 # Function to check brew installation
 check_brew() {
     if ! command -v brew &> /dev/null; then
-        echo "❌ Homebrew is not installed"
+        echo "[MISSING] Homebrew is not installed"
         return 1
     else
-        echo "✅ Homebrew is installed"
+        echo "[OK] Homebrew is installed"
         return 0
     fi
 }
@@ -186,21 +111,21 @@ check_brew() {
 # Function to check if SentinelOne is properly installed
 check_sentinelone() {
     if [ -d "/Applications/SentinelOne/SentinelOne Extensions.app" ]; then
-        echo "✅ SentinelOne is installed"
+        echo "[OK] SentinelOne is installed"
         return 0
     else
-        echo "❌ SentinelOne is not installed"
+        echo "[MISSING] SentinelOne is not installed"
         return 1
     fi
 }
 
 # Function to check if Automox is properly installed
 check_automox() {
-    if [ -d "/Applications/Automox Remote Control.app" ]; then
-        echo "✅ Automox is installed"
+    if ps -ef | grep -v grep | grep -q "amagent"; then
+        echo "[OK] Automox is installed and running"
         return 0
     else
-        echo "❌ Automox is not installed"
+        echo "[MISSING] Automox is not installed or not running"
         return 1
     fi
 }
@@ -214,13 +139,13 @@ do_certification() {
 
     # Check OS
     if [[ "$OSTYPE" != "darwin"* ]]; then
-        echo "❌ This script requires MacOS. Current OS: $OSTYPE"
+        echo "[MISSING] This script requires MacOS. Current OS: $OSTYPE"
         exit 1
     else
-        echo "✅ Running on MacOS"
+        echo "[OK] Running on MacOS"
     fi
 
-    echo -e "\n📊 Checking Development Tools:"
+    echo -e "\nCHECKING DEVELOPMENT TOOLS:"
     # Check Homebrew
     check_brew || ((missing_tools++))
 
@@ -230,44 +155,47 @@ do_certification() {
     check_command "gcloud" "Google Cloud SDK" || ((missing_tools++))
     check_command "gh" "GitHub CLI" || ((missing_tools++))
 
-    echo -e "\n🖥️ Checking Applications:"
+    echo -e "\nCHECKING APPLICATIONS:"
     # Check applications with both brew and direct installation
     check_app_installation "docker" "Docker" "Docker" || ((missing_tools++))
     check_app_installation "slack" "Slack" "Slack" || ((missing_tools++))
     check_app_installation "twingate" "Twingate" "Twingate" || ((missing_tools++))
+    check_app_installation "cursor" "Cursor" "Cursor" || ((missing_tools++))
+    check_app_installation "dbeaver-community" "DBeaver" "DBeaver Community" || ((missing_tools++))
+    check_app_installation "visual-studio-code" "Visual Studio Code" "Visual Studio Code" || ((missing_tools++))
 
-    echo -e "\n🔒 Checking Security Tools:"
+    echo -e "\nCHECKING SECURITY TOOLS:"
     # Check security applications
     check_sentinelone || ((missing_tools++))
     check_automox || ((missing_tools++))
     check_app_installation "nordpass" "NordPass" "NordPass" || ((missing_tools++))
 
-    echo -e "\n🔒 Checking Security:"
-    check_forbidden_apps
-    if [ $? -eq 1 ]; then
+    # Check for TeamViewer (should not be installed)
+    if [ -d "/Applications/TeamViewer.app" ] || [ -d "$HOME/Applications/TeamViewer.app" ]; then
+        echo "${RED}WARNING: TeamViewer is installed and should be removed for security reasons${RESET}"
         ((security_warnings++))
     fi
 
     # Check gkc.sh
-    echo -e "\n🛠️  Checking Utilities:"
+    echo -e "\nCHECKING UTILITIES:"
     if [ ! -f ${HOME}/Applications/google-cloud-sdk/bin/gkc.sh ]; then
-        echo "❌ gkc.sh is not installed"
+        echo "[MISSING] gkc.sh is not installed"
         ((missing_tools++))
     else
-        echo "✅ gkc.sh is installed"
+        echo "[OK] gkc.sh is installed"
     fi
 
-    echo -e "\n📋 Summary:"
+    echo -e "\nSUMMARY:"
     if [ $missing_tools -eq 0 ] && [ $security_warnings -eq 0 ]; then
-        echo "✅ All tools are installed and no security warnings!"
+        echo "[OK] All tools are installed and no security warnings!"
         return 0
     else
         if [ $missing_tools -gt 0 ]; then
-            echo "❌ Found $missing_tools missing tool(s)"
+            echo "[MISSING] Found $missing_tools missing tool(s)"
             echo "Run with --install to install missing tools"
         fi
         if [ $security_warnings -gt 0 ]; then
-            echo "${RED}⚠️  Found $security_warnings security warning(s)${RESET}"
+            echo "${RED}WARNING: Found $security_warnings security warning(s)${RESET}"
             echo "Please address security warnings before proceeding"
         fi
         return 1
@@ -277,6 +205,31 @@ do_certification() {
 # Function to perform installation
 do_installation() {
     echo "Starting MacOS laptop setup..."
+
+    # Check directory permissions first
+    local permission_issues=false
+    if [ ! -w "/usr/local/share/zsh" ] || [ ! -w "/usr/local/share/zsh/site-functions" ]; then
+        echo "WARNING: The following directories are not writable by your user:"
+        [ ! -w "/usr/local/share/zsh" ] && echo "/usr/local/share/zsh"
+        [ ! -w "/usr/local/share/zsh/site-functions" ] && echo "/usr/local/share/zsh/site-functions"
+        echo ""
+        echo "Please run the following command to fix permissions and then run this script again:"
+        echo "  sudo chown -R $(whoami) /usr/local/share/zsh /usr/local/share/zsh/site-functions"
+        echo "  chmod u+w /usr/local/share/zsh /usr/local/share/zsh/site-functions"
+        permission_issues=true
+    fi
+
+    # Check if running as root or via sudo
+    if [ "$(id -u)" = "0" ]; then
+        echo "[ERROR] This script should not be run as root or with sudo"
+        echo "Please run it as a regular user. If you need to fix permissions, see instructions above."
+        exit 1
+    fi
+
+    # If there are permission issues, exit with instructions
+    if [ "$permission_issues" = true ]; then
+        exit 1
+    fi
 
     # Install Homebrew if not present
     if ! command -v brew &> /dev/null; then
@@ -320,6 +273,30 @@ do_installation() {
         brew install --cask twingate
     fi
 
+    # Install NordPass if not present
+    if ! check_app_installation "nordpass" "NordPass" "NordPass" &>/dev/null; then
+        echo "Installing NordPass..."
+        brew install --cask nordpass
+    fi
+    
+    # Install Cursor if not present
+    if ! check_app_installation "cursor" "Cursor" "Cursor" &>/dev/null; then
+        echo "Installing Cursor..."
+        brew install --cask cursor
+    fi
+    
+    # Install DBeaver Community if not present
+    if ! check_app_installation "dbeaver-community" "DBeaver" "DBeaver Community" &>/dev/null; then
+        echo "Installing DBeaver Community..."
+        brew install --cask dbeaver-community
+    fi
+
+    # Install Visual Studio Code if not present
+    if ! check_app_installation "visual-studio-code" "Visual Studio Code" "Visual Studio Code" &>/dev/null; then
+        echo "Installing Visual Studio Code..."
+        brew install --cask visual-studio-code
+    fi
+
     # Install Google Cloud SDK
     if ! command -v gcloud &> /dev/null; then
         echo "Installing Google Cloud SDK..."
@@ -330,7 +307,7 @@ do_installation() {
 
         # Download and install Google Cloud SDK
         curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-latest-darwin-x86_64.tar.gz
-        tar -xf google-cloud-cli-latest-darwin-x86_64.tar.gz
+        tar -x google-cloud-cli-latest-darwin-x86_64.tar.gz
         ./google-cloud-sdk/install.sh --quiet
 
         # Clean up
@@ -346,7 +323,7 @@ do_installation() {
         fi
 
         # Initialize gcloud
-        ./google-cloud-sdk/bin/gcloud init
+        "${HOME}/Applications/google-cloud-sdk/bin/gcloud" init --quiet
     fi
 
     # Install gkc.sh
@@ -357,22 +334,41 @@ do_installation() {
         sudo ln -sf "${HOME}/Applications/google-cloud-sdk/bin/gkc.sh" /usr/local/bin/gkc.sh
     fi
 
-    remove_forbidden_apps
+    # Check for TeamViewer and warn if present
+    if [ -d "/Applications/TeamViewer.app" ] || [ -d "${HOME}/Applications/TeamViewer.app" ]; then
+        echo -e "\nWARNING: TeamViewer is installed and should be removed for security reasons"
+        echo "Please uninstall TeamViewer manually using the following steps:"
+        echo "1. Quit TeamViewer if it's running"
+        echo "2. Open Finder"
+        echo "3. Go to Applications"
+        echo "4. Drag TeamViewer to the Trash"
+        echo "5. Empty the Trash"
+    fi
 
-    echo -e "\n✅ MacOS setup complete!"
+    echo -e "\n[OK] MacOS setup complete!"
     echo "Please restart your terminal to ensure all changes take effect"
     echo "You can now connect using: gkc.sh adh-development develop"
 
     # Additional manual steps needed
-    echo -e "\n📝 Manual steps needed:"
+    echo -e "\nNOTE: Manual steps needed:"
     echo "1. Run 'gh auth login' to authenticate with GitHub if you installed GitHub CLI"
-    echo "2. Install SentinelOne from your IT department"
-    echo "3. Install Automox from your IT department"
-    echo "4. Install NordPass from your IT department"
+    
+    # Verify security tools
+    if ! check_sentinelone &>/dev/null; then
+        echo "2. Install SentinelOne from your IT department"
+    fi
+    
+    if ! check_automox &>/dev/null; then
+        echo "3. Install Automox from your IT department"
+    fi
+    
+    if ! check_app_installation "nordpass" "NordPass" "NordPass" &>/dev/null; then
+        echo "4. Install NordPass from your IT department or run 'brew install --cask nordpass'"
+    fi
 
     # Check for TeamViewer and warn if present
     if [ -d "/Applications/TeamViewer.app" ] || [ -d "${HOME}/Applications/TeamViewer.app" ]; then
-        echo -e "\n${RED}⚠️  WARNING: TeamViewer is installed and should be removed for security reasons"
+        echo -e "\n${RED}WARNING: TeamViewer is installed and should be removed for security reasons"
         echo "Please uninstall TeamViewer manually using the following steps:"
         echo "1. Quit TeamViewer if it's running"
         echo "2. Open Finder"
@@ -383,117 +379,56 @@ do_installation() {
 
 }
 
-# Function to check for forbidden applications
-check_forbidden_apps() {
-    local forbidden_found=0
-
-    echo -e "\n🔍 Checking for forbidden applications:"
-
-    for app_info in "${FORBIDDEN_APPS[@]}"; do
-        IFS=":" read -r app_name app_reason <<< "$app_info"
-
-        # Check both system and user Applications folders
-        if [ -d "/Applications/${app_name}.app" ] || [ -d "${HOME}/Applications/${app_name}.app" ]; then
-            echo -e "${RED}⚠️  WARNING: ${app_name} found - ${app_reason}${RESET}"
-            forbidden_found=1
-        fi
-    done
-
-    return $forbidden_found
-}
-
-# Function to guide removal of forbidden applications
-remove_forbidden_apps() {
-    local any_found=0
-
-    echo -e "\n🗑️  Checking for applications that need removal:"
-
-    for app_info in "${FORBIDDEN_APPS[@]}"; do
-        IFS=":" read -r app_name app_reason <<< "$app_info"
-
-        if [ -d "/Applications/${app_name}.app" ] || [ -d "${HOME}/Applications/${app_name}.app" ]; then
-            echo -e "${RED}Found ${app_name}${RESET}"
-            echo "Please remove it following these steps:"
-            echo "1. Quit ${app_name} if it's running"
-            echo "2. Open Finder"
-            echo "3. Go to Applications"
-            echo "4. Drag ${app_name} to the Trash"
-            echo "5. Empty the Trash"
-            echo ""
-            any_found=1
-        fi
-    done
-
-    if [ $any_found -eq 0 ]; then
-        echo "✅ No forbidden applications found"
-    fi
-}
-
 # Add color codes using tput
 RED=$(tput setaf 1)
 RESET=$(tput sgr0)
 
-# Array of applications that should not be installed
-FORBIDDEN_APPS=(
-    "TeamViewer:TeamViewer is a security risk and should be removed"
-    "FortiClient:FortiClient VPN should be removed in favor of Twingate"
-    "AnyDesk:AnyDesk is a security risk and should be removed"
-)
+# Check if no arguments were provided
+if [ $# -eq 0 ]; then
+    usage
+    exit 0
+fi
 
-# Main execution
-main() {
-    # Initial checks
-    check_not_root
-    check_requirements
-    check_os
+# Parse command line options
+while getopts "hci-:" opt; do
+    case "${opt}" in
+        h)
+            usage
+            ;;
+        c)
+            do_certification
+            ;;
+        i)
+            do_installation
+            ;;
+        -)
+            case "${OPTARG}" in
+                help)
+                    usage
+                    ;;
+                certification)
+                    do_certification
+                    ;;
+                install)
+                    do_installation
+                    ;;
+                *)
+                    echo "Invalid option: --${OPTARG}" >&2
+                    usage
+                    ;;
+            esac
+            ;;
+        ?)
+            usage
+            ;;
+    esac
+done
 
-    # If no arguments provided when running directly (not piped)
-    if [ -t 0 ] && [ $# -eq 0 ]; then
-        usage
-        exit 0
-    fi
+# Remove processed options
+shift $((OPTIND-1))
 
-    local CERTIFICATION=0
-    local INSTALLATION=0
-
-    # Process options
-    while [ $# -gt 0 ]; do
-        case "$1" in
-            -h|--help)
-                usage
-                ;;
-            -v|--version)
-                version
-                ;;
-            -c|--certification)
-                CERTIFICATION=1
-                shift
-                ;;
-            -i|--install)
-                INSTALLATION=1
-                shift
-                ;;
-            *)
-                error "Unknown option: $1"
-                ;;
-        esac
-    done
-
-    # Execute requested operations
-    if [ $CERTIFICATION -eq 1 ]; then
-        do_certification
-    fi
-
-    if [ $INSTALLATION -eq 1 ]; then
-        do_installation
-    fi
-
-    # If no operation was selected
-    if [ $CERTIFICATION -eq 0 ] && [ $INSTALLATION -eq 0 ]; then
-        warn "No operation selected"
-        usage
-    fi
-}
-
-# Ensure the script is being sourced properly
-main "$@"
+# If there are remaining arguments, show usage
+if [ $# -gt 0 ]; then
+    echo "Error: Unknown argument(s): $@"
+    usage
+fi
