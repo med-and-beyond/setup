@@ -325,16 +325,36 @@ do_installation() {
             
             # Initialize gcloud
             echo "Initializing Google Cloud SDK..."
-            "${HOME}/Applications/google-cloud-sdk/bin/gcloud" init --quiet
+            "${HOME}/Applications/google-cloud-sdk/bin/gcloud" init
         else
             echo "ERROR: Google Cloud SDK installation failed. Please try again or install manually."
             echo "Manual installation instructions: https://cloud.google.com/sdk/docs/install"
         fi
     fi
 
-    # Gcloud Auth login
     cd "${HOME}/Applications"
-    ./google-cloud-sdk/bin/gcloud init
+    # Install kubectl and GKE auth plugin components
+    echo "Installing kubectl via gcloud components..."
+    ./google-cloud-sdk/bin/gcloud components install kubectl --quiet
+
+    echo "Installing gke-gcloud-auth-plugin for kubectl authentication with GKE..."
+    ./google-cloud-sdk/bin/gcloud components install gke-gcloud-auth-plugin --quiet
+
+    # Verify installations
+    if command -v "${HOME}/Applications/google-cloud-sdk/bin/kubectl" &> /dev/null; then
+        echo "[OK] kubectl installed successfully"
+    else
+        echo "[WARNING] kubectl installation may have failed"
+    fi
+
+    if [ -f "${HOME}/Applications/google-cloud-sdk/bin/gke-gcloud-auth-plugin" ]; then
+        echo "[OK] gke-gcloud-auth-plugin installed successfully"
+    else
+        echo "[WARNING] gke-gcloud-auth-plugin installation may have failed"
+    fi
+
+    # Create kubectl symlink in /usr/local/bin for convenience
+    sudo ln -sf "${HOME}/Applications/google-cloud-sdk/bin/kubectl" /usr/local/bin/kubectl
 
     # Install gkc.sh
     if [ ! -f "${HOME}/Applications/google-cloud-sdk/bin/gkc.sh" ]; then
