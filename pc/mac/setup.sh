@@ -305,25 +305,55 @@ do_installation() {
         mkdir -p "${HOME}/Applications"
         cd "${HOME}/Applications"
 
-        # Download and install Google Cloud SDK
-        curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-latest-darwin-x86_64.tar.gz
-        tar -x google-cloud-cli-latest-darwin-x86_64.tar.gz
-        ./google-cloud-sdk/install.sh --quiet
-
-        # Clean up
-        rm google-cloud-cli-latest-darwin-x86_64.tar.gz
-
-        # Configure shell
-        echo "source '${HOME}/Applications/google-cloud-sdk/path.bash.inc'" >> "${HOME}/.bash_profile"
-        echo "source '${HOME}/Applications/google-cloud-sdk/completion.bash.inc'" >> "${HOME}/.bash_profile"
-
-        if [ -f "${HOME}/.zshrc" ]; then
-            echo "source '${HOME}/Applications/google-cloud-sdk/path.zsh.inc'" >> "${HOME}/.zshrc"
-            echo "source '${HOME}/Applications/google-cloud-sdk/completion.zsh.inc'" >> "${HOME}/.zshrc"
+        # Use more reliable download with proper flags
+        echo "Downloading Google Cloud SDK..."
+        curl -L -O "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-latest-darwin-x86_64.tar.gz"
+        
+        # Verify download and extract with proper flags
+        if [ -s "google-cloud-cli-latest-darwin-x86_64.tar.gz" ]; then
+            echo "Extracting Google Cloud SDK..."
+            tar -xzf google-cloud-cli-latest-darwin-x86_64.tar.gz
+            
+            if [ -d "google-cloud-sdk" ]; then
+                echo "Running Google Cloud SDK installer..."
+                ./google-cloud-sdk/install.sh --quiet
+                
+                # Clean up
+                rm google-cloud-cli-latest-darwin-x86_64.tar.gz
+                
+                # Configure shell
+                echo "source '${HOME}/Applications/google-cloud-sdk/path.bash.inc'" >> "${HOME}/.bash_profile"
+                echo "source '${HOME}/Applications/google-cloud-sdk/completion.bash.inc'" >> "${HOME}/.bash_profile"
+                
+                if [ -f "${HOME}/.zshrc" ]; then
+                    echo "source '${HOME}/Applications/google-cloud-sdk/path.zsh.inc'" >> "${HOME}/.zshrc"
+                    echo "source '${HOME}/Applications/google-cloud-sdk/completion.zsh.inc'" >> "${HOME}/.zshrc"
+                fi
+                
+                # Initialize gcloud
+                "${HOME}/Applications/google-cloud-sdk/bin/gcloud" init --quiet
+            else
+                echo "ERROR: Failed to extract Google Cloud SDK. Installation aborted."
+            fi
+        else
+            echo "ERROR: Failed to download Google Cloud SDK. Trying alternative method..."
+            # Fallback to official installer script
+            curl -sSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir="${HOME}/Applications"
+            
+            # Configure shell if installer succeeded
+            if [ -d "google-cloud-sdk" ]; then
+                echo "source '${HOME}/Applications/google-cloud-sdk/path.bash.inc'" >> "${HOME}/.bash_profile"
+                echo "source '${HOME}/Applications/google-cloud-sdk/completion.bash.inc'" >> "${HOME}/.bash_profile"
+                
+                if [ -f "${HOME}/.zshrc" ]; then
+                    echo "source '${HOME}/Applications/google-cloud-sdk/path.zsh.inc'" >> "${HOME}/.zshrc"
+                    echo "source '${HOME}/Applications/google-cloud-sdk/completion.zsh.inc'" >> "${HOME}/.zshrc"
+                fi
+                
+                # Initialize gcloud
+                "${HOME}/Applications/google-cloud-sdk/bin/gcloud" init --quiet
+            fi
         fi
-
-        # Initialize gcloud
-        "${HOME}/Applications/google-cloud-sdk/bin/gcloud" init --quiet
     fi
 
     # Install gkc.sh
