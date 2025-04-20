@@ -93,8 +93,13 @@ check_sentinelone() {
 
 # Function to check if Automox is properly installed (on Windows)
 check_automox() {
+    # First check for the service
     if powershell.exe -Command "Get-Service -Name 'Automox' 2>null" | grep -q "Running"; then
-        echo "[OK] Automox is installed and running"
+        echo "[OK] Automox is installed and running (service)"
+        return 0
+    # Then check for the process
+    elif powershell.exe -Command "Get-Process -Name 'Automox*' 2>null" | grep -q "Handles"; then
+        echo "[OK] Automox is installed and running (process)"
         return 0
     else
         echo "[MISSING] Automox is not installed or not running"
@@ -190,6 +195,13 @@ install_windows_app() {
 do_installation() {
     echo "Starting WSL laptop setup..."
 
+    # Check if running as root or via sudo
+    if [ "$(id -u)" = "0" ]; then
+        echo "[ERROR] This script should not be run as root or with sudo"
+        echo "Please run it as a regular user."
+        exit 1
+    fi
+
     # Update repositories
     echo "Updating package repositories..."
     sudo apt update
@@ -266,21 +278,55 @@ do_installation() {
     if ! command -v gcloud &> /dev/null; then
         echo "Installing Google Cloud SDK..."
 
-        # Download and install Google Cloud SDK
-        curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-latest-linux-x86_64.tar.gz
-        tar -xf google-cloud-sdk-latest-linux-x86_64.tar.gz -C ${HOME}
-        ${HOME}/google-cloud-sdk/install.sh --quiet
+        # Create home directory
+        cd "${HOME}"
 
-        # Clean up
-        rm google-cloud-sdk-latest-linux-x86_64.tar.gz
+        # Use the official installer script (most reliable method)
+        echo "Downloading and installing Google Cloud SDK using official installer..."
+        curl -fsSL https://sdk.cloud.google.com | bash -x -- --disable-prompts
 
-        # Configure shell
-        echo "source '${HOME}/google-cloud-sdk/path.bash.inc'" >> "${HOME}/.bashrc"
-        echo "source '${HOME}/google-cloud-sdk/completion.bash.inc'" >> "${HOME}/.bashrc"
-
-        # Initialize gcloud
-        ${HOME}/google-cloud-sdk/bin/gcloud init
+        # Check if installation was successful
+        if [ -d "${HOME}/google-cloud-sdk" ]; then
+            echo "Google Cloud SDK installation successful"
+            
+            # Configure shell
+            echo "Configuring shell for Google Cloud SDK..."
+            echo "source '${HOME}/google-cloud-sdk/path.bash.inc'" >> "${HOME}/.bashrc"
+            echo "source '${HOME}/google-cloud-sdk/completion.bash.inc'" >> "${HOME}/.bashrc"
+            
+            # Initialize gcloud
+            echo "Initializing Google Cloud SDK..."
+            "${HOME}/google-cloud-sdk/bin/gcloud" init
+        else
+            echo "ERROR: Google Cloud SDK installation failed. Please try again or install manually."
+            echo "Manual installation instructions: https://cloud.google.com/sdk/docs/install"
+        fi
     fi
+    
+    # Install kubectl and GKE auth plugin components
+    cd "${HOME}"
+    
+    echo "Installing kubectl via gcloud components..."
+    "${HOME}/google-cloud-sdk/bin/gcloud" components install kubectl --quiet
+
+    echo "Installing gke-gcloud-auth-plugin for kubectl authentication with GKE..."
+    "${HOME}/google-cloud-sdk/bin/gcloud" components install gke-gcloud-auth-plugin --quiet
+
+    # Verify installations
+    if command -v "${HOME}/google-cloud-sdk/bin/kubectl" &> /dev/null; then
+        echo "[OK] kubectl installed successfully"
+    else
+        echo "[WARNING] kubectl installation may have failed"
+    fi
+
+    if [ -f "${HOME}/google-cloud-sdk/bin/gke-gcloud-auth-plugin" ]; then
+        echo "[OK] gke-gcloud-auth-plugin installed successfully"
+    else
+        echo "[WARNING] gke-gcloud-auth-plugin installation may have failed"
+    fi
+
+    # Create kubectl symlink in /usr/local/bin for convenience
+    sudo ln -sf "${HOME}/google-cloud-sdk/bin/kubectl" /usr/local/bin/kubectl
 
     # Install gkc.sh
     if [ ! -f "${HOME}/google-cloud-sdk/bin/gkc.sh" ]; then
