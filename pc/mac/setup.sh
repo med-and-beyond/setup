@@ -307,7 +307,7 @@ do_installation() {
 
         # Use the official installer script (most reliable method)
         echo "Downloading and installing Google Cloud SDK using official installer..."
-        curl -fsSL https://sdk.cloud.google.com | bash -x -- --disable-prompts --install-dir="${HOME}/Applications"
+        bash -c "$(curl -fsSL https://sdk.cloud.google.com)" _ --disable-prompts --install-dir="${HOME}/Applications"
         
         # Check if installation was successful
         if [ -d "${HOME}/Applications/google-cloud-sdk" ]; then
