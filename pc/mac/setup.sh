@@ -210,30 +210,42 @@ do_certification() {
             continue
         fi
 
-        # Print initial check message. The helper functions will print their own status with emoji.
         echo -n "🤔 Checking $display_name... "
 
         case "$type" in
             core_tool)
                 if [[ "$id" == "homebrew" ]]; then
-                    # Let check_brew print its full line including emoji
                     if ! check_brew; then ((missing_tools++)); fi
                 fi
                 ;;
             cli)
-                # Let check_command print its full line including emoji
                 if ! check_command "$cmd_name" "$display_name"; then ((missing_tools++)); fi
                 ;;
             cask)
-                # Let check_app_installation print its full line including emoji
                 if ! check_app_installation "$brew_name" "$app_path_name" "$display_name"; then ((missing_tools++)); fi
                 ;;
             gcloud_sdk_base)
-                # Let check_command print its full line for gcloud
-                if ! check_command "$cmd_name" "$display_name"; then ((missing_tools++)); fi
+                GCLOUD_DEFAULT_PATH="${HOME}/Applications/google-cloud-sdk/bin/gcloud"
+                if command -v gcloud &> /dev/null; then
+                    # Get path from command -v for consistent messaging if needed, though check_command does it
+                    local found_path
+                    found_path=$(command -v gcloud)
+                    # Use the existing check_command which prints the emoji and path details
+                    if ! check_command "$cmd_name" "$display_name"; then 
+                        # This case should ideally not be hit if command -v succeeded, unless check_command has other logic
+                        # For safety, marking as missing if check_command (which uses command -v) fails
+                        ((missing_tools++))
+                    fi
+                elif [ -x "$GCLOUD_DEFAULT_PATH" ]; then
+                    # If not in PATH, but exists at the default script installation location
+                    echo -e "${GREEN}✅ $display_name is at default path ($GCLOUD_DEFAULT_PATH). ${YELLOW}(Shell PATH update might be pending).${RESET}"
+                else
+                    # If not in PATH and not at default location
+                    echo -e "${RED}❌ $display_name is not found in PATH or at default location.${RESET}"
+                    ((missing_tools++))
+                fi
                 ;;
             gcloud_util)
-                # This one has custom echo logic already including emoji in do_certification
                 if [ ! -f "$app_path_name" ]; then
                     echo -e "${RED}❌ $display_name is not installed at $app_path_name${RESET}" 
                     ((missing_tools++))
@@ -242,11 +254,9 @@ do_certification() {
                 fi
                 ;;
             security_verify_path)
-                # Let check_application print its full line including emoji
                 if ! check_application "$app_path_name" "$display_name"; then ((missing_tools++)); fi
                 ;;
             security_verify_ps)
-                # This one has custom echo logic already including emoji in do_certification
                 if ps -ef | grep -v grep | grep -q "$cmd_name"; then
                     echo -e "${GREEN}✅ $display_name is installed and running${RESET}" 
                 else
