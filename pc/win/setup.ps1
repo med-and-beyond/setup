@@ -14,29 +14,13 @@
     Install all required tools for the selected profile.
 .PARAMETER Profile
     Specify user profile (engineering, data, or other). Defaults to 'other'.
-.PARAMETER AutomoxKey
-    Specify the Automox access key for installation.
-.PARAMETER SentinelOneToken
-    Specify the SentinelOne registration token for installation.
-    (Note: SentinelOne installation method for Windows will differ from MacOS).
-.EXAMPLE
-    .\setup.ps1 -Help
-.EXAMPLE
-    .\setup.ps1 -Certification -Profile engineering
-.EXAMPLE
-    .\setup.ps1 -Install -Profile data -SentinelOneToken YOUR_S1_TOKEN
-.EXAMPLE
-    .\setup.ps1 -Install -Profile engineering -AutomoxKey YOUR_AM_KEY -SentinelOneToken YOUR_S1_TOKEN
 #>
 param (
     [switch]$Help,
     [switch]$Certification,
     [switch]$Install,
     [ValidateSet("engineering", "data", "other")]
-    [string]$Profile = "other", # Default profile
-    [string]$AutomoxKey = "",
-    [string]$SentinelOneToken = ""
-    # SentinelOne Download Link and PKG name are MacOS specific, will need Windows equivalent logic
+    [string]$Profile = "other" # Default profile
 )
 
 # --- Global Configuration and Definitions ---
@@ -75,17 +59,13 @@ $AppsDefinitions = @(
     @{ ID = "docker"; DisplayName = "Docker Desktop"; Type = "choco"; Profiles = "engineering"; ChocoPackageName = "docker-desktop"; VerificationPath = "$($env:ProgramFiles)\Docker\Docker\Docker Desktop.exe" }
     @{ ID = "slack"; DisplayName = "Slack"; Type = "choco"; Profiles = "all"; ChocoPackageName = "slack"; VerificationPath = "$($env:LOCALAPPDATA)\Slack\slack.exe" }
     @{ ID = "twingate"; DisplayName = "Twingate"; Type = "manual_download"; Profiles = "all"; VerificationPath = "$($env:ProgramFiles)\Twingate\Twingate.exe" } # Assuming default path
-    @{ ID = "nordpass"; DisplayName = "NordPass"; Type = "choco"; Profiles = "all"; ChocoPackageName = "nordpass"; VerificationPath = "$($env:ProgramFiles)\NordPass\NordPass.exe" }
+    @{ ID = "nordpass"; DisplayName = "NordPass"; Type = "direct_download"; Profiles = "all"; DownloadUrl = "https://downloads.npass.app/windows/NordPassSetup.exe"; VerificationPath = "$($env:ProgramFiles)\NordPass\NordPass.exe" }
     @{ ID = "cursor"; DisplayName = "Cursor"; Type = "manual_download"; Profiles = "engineering,data"; VerificationPath = "$($env:LOCALAPPDATA)\Programs\cursor\Cursor.exe" } # Assuming default path
     @{ ID = "dbeaver"; DisplayName = "DBeaver Community"; Type = "choco"; Profiles = "engineering,data"; ChocoPackageName = "dbeaver"; VerificationPath = "$($env:ProgramFiles)\DBeaver\dbeaver.exe" }
     @{ ID = "vscode"; DisplayName = "Visual Studio Code"; Type = "choco"; Profiles = "engineering,data"; ChocoPackageName = "vscode"; VerificationCommand = "code --version" }
 
     # gkc.sh equivalent for Windows (TBD - likely a PowerShell script or different auth method)
     @{ ID = "gkc-win"; DisplayName = "GKE Cluster Connect Utility (Win)"; Type = "placeholder"; Profiles = "engineering" }
-
-    # Security Tools
-    @{ ID = "sentinelone"; DisplayName = "SentinelOne"; Type = "manual_download_token"; Profiles = "all" } # Verification: e.g., check service or agent path
-    @{ ID = "automox"; DisplayName = "Automox"; Type = "manual_download_key"; Profiles = "all" } # Verification: e.g., Get-Service AmAgent
 )
 
 # --- Function Definitions ---
@@ -100,14 +80,12 @@ function Show-Usage {
     Write-HostColorized "  -Certification       Check what tools are missing for selected profile" $ColorYellow
     Write-HostColorized "  -Install             Install all required tools for selected profile" $ColorYellow
     Write-HostColorized "  -Profile <string>    User profile (engineering, data, or other). Default: other" $ColorYellow
-    Write-HostColorized "  -AutomoxKey <string> Automox access key for installation" $ColorYellow
-    Write-HostColorized "  -SentinelOneToken <string> SentinelOne registration token" $ColorYellow
     
     Write-HostColorized "Examples:" $ColorYellow
     Write-HostColorized "  .\setup.ps1 -Help" $ColorYellow
     Write-HostColorized "  .\setup.ps1 -Certification -Profile engineering" $ColorYellow
-    Write-HostColorized "  .\setup.ps1 -Install -Profile data -SentinelOneToken YOUR_S1_TOKEN" $ColorYellow
-    Write-HostColorized "  .\setup.ps1 -Install -Profile engineering -AutomoxKey YOUR_AM_KEY -SentinelOneToken YOUR_S1_TOKEN" $ColorYellow
+    Write-HostColorized "  .\setup.ps1 -Install -Profile data" $ColorYellow
+    Write-HostColorized "  .\setup.ps1 -Install -Profile engineering" $ColorYellow
     
     exit 1
 }
@@ -126,7 +104,7 @@ function Invoke-Certification {
     $missingTools = 0
     $securityWarnings = 0
 
-    Write-HostColorized ("CHECKING TOOLS " + " APPLICATIONS FOR PROFILE: $($Profile.ToUpper())") $ColorBlue
+    Write-HostColorized ("CHECKING TOOLS AND APPLICATIONS FOR PROFILE: $($Profile.ToUpper())") $ColorBlue
 
     foreach ($appDef in $AppsDefinitions) {
         if (-not (Test-IsAppForProfile $appDef.Profiles)) {
@@ -160,6 +138,7 @@ function Invoke-Certification {
     }
     
     Write-HostColorized "CHECKING GENERAL SECURITY: (Placeholder)" $ColorBlue
+    Write-HostColorized "Note: Security tools Automox and SentinelOne are managed by Intune." $ColorBlue
 
     Write-HostColorized "SUMMARY:" $ColorBlue
     if ($missingTools -eq 0 -and $securityWarnings -eq 0) {
@@ -250,6 +229,32 @@ function Invoke-Installation {
                 }
             }
             
+            "direct_download" {
+                try {
+                    Write-HostColorized "  Installing $($appDef.DisplayName) via direct download..." $ColorYellow
+                    
+                    # Create temp directory if it doesn't exist
+                    $tempDir = "$env:TEMP\direct_install"
+                    if (-not (Test-Path $tempDir)) {
+                        New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+                    }
+                    
+                    # Download the installer
+                    $installerPath = "$tempDir\$($appDef.ID)_installer.exe"
+                    Write-HostColorized "  Downloading from $($appDef.DownloadUrl)..." $ColorYellow
+                    (New-Object System.Net.WebClient).DownloadFile($appDef.DownloadUrl, $installerPath)
+                    
+                    # Run the installer
+                    Write-HostColorized "  Running installer..." $ColorYellow
+                    Start-Process -FilePath $installerPath -ArgumentList "/S", "/quiet", "/norestart" -Wait
+                    
+                    Write-HostColorized "  Installation completed. Cleaning up..." $ColorGreen
+                    Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
+                } catch {
+                    Write-HostColorized "  Failed to install $($appDef.DisplayName). Error: $_" $ColorRed
+                }
+            }
+            
             "core_packagemanager" {
                 # Already handled Chocolatey above
                 Write-HostColorized "  Core package manager already checked." $ColorYellow
@@ -273,42 +278,6 @@ function Invoke-Installation {
                 }
             }
             
-            "manual_download_token" {
-                if ($appDef.ID -eq "sentinelone" -and -not [string]::IsNullOrWhiteSpace($SentinelOneToken)) {
-                    Write-HostColorized "  Installing SentinelOne with token: $SentinelOneToken" $ColorYellow
-                    Write-HostColorized "  Please contact your IT department for the SentinelOne installer." $ColorYellow
-                    # In a real implementation, you might download the installer from a known URL and execute it with the token
-                } else {
-                    Write-HostColorized "  $($appDef.DisplayName) requires a token and manual installation." $ColorRed
-                    Write-HostColorized "  Please contact your IT department for assistance." $ColorRed
-                }
-            }
-            
-            "manual_download_key" {
-                if ($appDef.ID -eq "automox" -and -not [string]::IsNullOrWhiteSpace($AutomoxKey)) {
-                    Write-HostColorized "  Installing Automox with access key: $AutomoxKey" $ColorYellow
-                    
-                    # Example implementation for Automox
-                    $automoxInstallerUrl = "https://console.automox.com/installers/Automox_Installer-latest.msi"
-                    $automoxInstallerPath = "$env:TEMP\Automox_Installer.msi"
-                    
-                    try {
-                        Write-HostColorized "  Downloading Automox installer..." $ColorYellow
-                        (New-Object System.Net.WebClient).DownloadFile($automoxInstallerUrl, $automoxInstallerPath)
-                        
-                        Write-HostColorized "  Running Automox installer with access key..." $ColorYellow
-                        Start-Process "msiexec.exe" -ArgumentList "/i `"$automoxInstallerPath`" /qn ACCESSKEY=`"$AutomoxKey`"" -Wait
-                        
-                        Write-HostColorized "  Automox installation completed." $ColorGreen
-                    } catch {
-                        Write-HostColorized "  Failed to install Automox. Error: $_" $ColorRed
-                    }
-                } else {
-                    Write-HostColorized "  $($appDef.DisplayName) requires an access key and manual installation." $ColorRed
-                    Write-HostColorized "  Please contact your IT department for assistance." $ColorRed
-                }
-            }
-            
             default {
                 Write-HostColorized "  Unknown installation type: $($appDef.Type)" $ColorYellow
                 Write-HostColorized "  Please install $($appDef.DisplayName) manually." $ColorYellow
@@ -317,6 +286,7 @@ function Invoke-Installation {
     }
     
     Write-HostColorized "Installation phase for profile '$($Profile.ToUpper())' complete!" $ColorGreen
+    Write-HostColorized "Note: Security tools (Automox and SentinelOne) are managed by Intune." $ColorBlue
     Write-HostColorized "Please restart your terminal or system if prompted by any installers." $ColorYellow
 }
 
