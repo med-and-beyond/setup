@@ -4,7 +4,10 @@
 
 # Selected Profile: Stores the chosen profile, defaults to 'other'
 SELECTED_PROFILE="other"
-AUTOMOX_ACCESS_KEY="" # Variable to store Automox access key
+AUTOMOX_ACCESS_KEY=""
+SENTINELONE_TOKEN=""
+SENTINELONE_DOWNLOAD_LINK=""
+SENTINELONE_PKG_NAME="SentinelOneInstaller.pkg" # Default package name
 
 # Color Codes
 RED=$(tput setaf 1)
@@ -17,13 +20,17 @@ RESET=$(tput sgr0)
 # Type: cli, cask, gcloud_sdk_base, gcloud_util, security_verify_path, security_verify_ps, core_tool (homebrew)
 # Profiles: comma-separated list e.g., "all", "engineering", "other,engineering"
 APPS_DEFINITIONS=(
-    # Core tool - special handling
+    # Core tool - foundational
     "homebrew;Homebrew;core_tool;all;;;brew"
 
+    # Google Cloud SDK - Install this early as other tools might relate to it (kubectl, gkc.sh)
+    "google-cloud-sdk;Google Cloud SDK;gcloud_sdk_base;all;;;gcloud"
+
     # CLI tools
-    "k9s;k9s;cli;engineering;k9s;;k9s"
     "jq;jq;cli;all;jq;;jq"
     "gh;GitHub CLI;cli;engineering;gh;;gh"
+    # k9s - Logically comes after gcloud/kubectl setup though not a hard dependency for k9s install itself
+    "k9s;k9s;cli;engineering;k9s;;k9s"
 
     # Cask applications
     "docker;Docker;cask;engineering;docker;Docker;"
@@ -31,17 +38,15 @@ APPS_DEFINITIONS=(
     "twingate;Twingate;cask;all;twingate;Twingate;"
     "nordpass;NordPass;cask;all;nordpass;NordPass;"
     "cursor;Cursor;cask;engineering;cursor;Cursor;"
-    "dbeaver-community;DBeaver Community;cask;engineering;dbeaver-community;DBeaver;" # AppNameForPathCheck should be "DBeaver"
+    "dbeaver-community;DBeaver Community;cask;engineering;dbeaver-community;DBeaver;"
     "visual-studio-code;Visual Studio Code;cask;engineering;visual-studio-code;Visual Studio Code;"
 
-    # Google Cloud SDK - special handling for install, check gcloud command
-    "google-cloud-sdk;Google Cloud SDK;gcloud_sdk_base;engineering;;;gcloud"
-    # gkc.sh - special handling: file check, symlink install, tied to gcloud sdk install
+    # gkc.sh - Depends on gcloud SDK (specifically gsutil) being installed
     "gkc;gkc.sh;gcloud_util;engineering;;${HOME}/Applications/google-cloud-sdk/bin/gkc.sh;gkc.sh"
 
-    # Security Verification Only tools (installed by IT, script just checks)
+    # Security Verification/Installation
     "sentinelone;SentinelOne;security_verify_path;all;;SentinelOne/SentinelOne Extensions;"
-    "automox;Automox;security_verify_ps;all;;;amagent" # process name to grep
+    "automox;Automox;security_verify_ps;all;;;amagent"
 )
 
 # --- Function Definitions (usage, check_*, do_certification, do_installation) ---
@@ -58,17 +63,20 @@ Usage: $0 [OPTIONS]
 A utility to manage development environment setup for MacOS.
 
 Options:
-    -h, --help                Show this help message
-    -c, --certification       Check and notify what tools are missing
-    -i, --install             Install all required tools
-    --profile <name>        Specify user profile (engineering or other). Defaults to 'other'.
-    --automox-key <key>     Specify the Automox access key for installation.
+    -h, --help                      Show this help message
+    -c, --certification           Check and notify what tools are missing
+    -i, --install                 Install all required tools
+    --profile <name>            Specify user profile (engineering or other). Defaults to 'other'.
+    --automox-key <key>         Specify the Automox access key for installation.
+    --sentinelone-token <token> Specify the SentinelOne registration token for installation.
+    --sentinelone-link <url>    Specify the SentinelOne PKG download URL for installation.
+    --sentinelone-pkg-name <name> (Optional) Specify the SentinelOne PKG filename (defaults to SentinelOneInstaller.pkg).
 
 Examples:
     $0 --help
     $0 --certification --profile engineering
-    $0 --install --profile engineering
-    $0 --install --profile engineering --automox-key YOUR_KEY_HERE
+    $0 --install --profile engineering --automox-key YOUR_AM_KEY
+    $0 --install --profile other --sentinelone-token YOUR_S1_TOKEN --sentinelone-link YOUR_S1_DOWNLOAD_URL
 
 This script will manage the installation and verification of tools
 based on the selected profile.
@@ -286,36 +294,14 @@ do_certification() {
 do_installation() {
     echo -e "${BLUE}🚀 Performing installation for profile: ${YELLOW}$SELECTED_PROFILE${RESET}"
 
-    # Check directory permissions first (important pre-flight check)
-    local permission_issues=false
-    # Expand ~ to HOME for portability, though /usr/local/ is absolute
-    local zsh_share_path="/usr/local/share/zsh"
-    local zsh_site_functions_path="/usr/local/share/zsh/site-functions"
-
-    if [ ! -w "$zsh_share_path" ] || [ ! -w "$zsh_site_functions_path" ]; then
-        echo -e "${YELLOW}⚠️ WARNING: The following directories might not be writable by your user:${RESET}"
-        [ ! -d "$zsh_share_path" ] && echo -e "         (Directory $zsh_share_path does not exist or no write perm)"
-        [ ! -w "$zsh_share_path" ] && [ -d "$zsh_share_path" ] && echo -e "         $zsh_share_path"
-        [ ! -d "$zsh_site_functions_path" ] && echo -e "         (Directory $zsh_site_functions_path does not exist or no write perm)"
-        [ ! -w "$zsh_site_functions_path" ] && [ -d "$zsh_site_functions_path" ] && echo -e "         $zsh_site_functions_path"
-        echo ""
-        echo -e "${YELLOW}Please ensure your user can write to /usr/local/share/zsh and its subdirectories."
-        echo -e "Often, Homebrew setup handles this. If issues persist, you might need:
-  ${GREEN}sudo chown -R $(whoami) /usr/local/share/zsh /usr/local/share/zsh/site-functions
-  chmod u+w /usr/local/share/zsh /usr/local/share/zsh/site-functions${RESET}"
-        echo -e "${YELLOW}Attempting to proceed, but some installations (like gcloud SDK shell completion) might fail.${RESET}"
-        # permission_issues=true # Decide if this should be fatal
-    fi
+    # Removed directory permission checks as per user request
+    # Original checks for /usr/local/share/zsh and /usr/local/share/zsh/site-functions deleted.
 
     if [ "$(id -u)" = "0" ]; then
         echo -e "${RED}❌ ERROR: This script should not be run as root or with sudo directly.${RESET}"
         echo "Individual commands requiring sudo (like Automox install) will prompt if necessary."
         exit 1
     fi
-
-    # if [ "$permission_issues" = true ]; then
-    #     exit 1
-    # fi
 
     echo -e "\n${BLUE}🔧 INSTALLING TOOLS & APPLICATIONS FOR PROFILE: ${YELLOW}$SELECTED_PROFILE${RESET}"
 
@@ -361,61 +347,89 @@ do_installation() {
                 fi
                 ;;
             gcloud_sdk_base)
-                if ! check_command "$cmd_name" "$display_name" &>/dev/null; then # Check silently
+                GCLOUD_SDK_PATH="${HOME}/Applications/google-cloud-sdk"
+                GCLOUD_BIN="${GCLOUD_SDK_PATH}/bin/gcloud"
+
+                if ! check_command "gcloud" "Google Cloud SDK" &>/dev/null; then # Check silently
                     echo "    Installing Google Cloud SDK (base)..."
                     mkdir -p "${HOME}/Applications" # Ensure target directory exists
-                    (cd "${HOME}/Applications" && curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir="${HOME}/Applications")
+                    # Use --quiet for the SDK installer itself
+                    (cd "${HOME}/Applications" && curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --quiet --install-dir="${HOME}/Applications")
 
-                    if [ -d "${HOME}/Applications/google-cloud-sdk" ]; then
-                        echo -e "    ${GREEN}✅ Google Cloud SDK downloaded to ~/Applications/google-cloud-sdk.${RESET}"
+                    if [ -d "$GCLOUD_SDK_PATH" ]; then
+                        echo -e "    ${GREEN}✅ Google Cloud SDK downloaded to $GCLOUD_SDK_PATH.${RESET}"
                         echo "    Configuring shell for Google Cloud SDK..."
-                        echo "source '${HOME}/Applications/google-cloud-sdk/path.bash.inc'" >> "${HOME}/.bash_profile"
-                        echo "source '${HOME}/Applications/google-cloud-sdk/completion.bash.inc'" >> "${HOME}/.bash_profile"
+                        echo "source '${GCLOUD_SDK_PATH}/path.bash.inc'" >> "${HOME}/.bash_profile"
+                        echo "source '${GCLOUD_SDK_PATH}/completion.bash.inc'" >> "${HOME}/.bash_profile"
                         if [ -f "${HOME}/.zshrc" ]; then
-                            echo "source '${HOME}/Applications/google-cloud-sdk/path.zsh.inc'" >> "${HOME}/.zshrc"
-                            echo "source '${HOME}/Applications/google-cloud-sdk/completion.zsh.inc'" >> "${HOME}/.zshrc"
+                            echo "source '${GCLOUD_SDK_PATH}/path.zsh.inc'" >> "${HOME}/.zshrc"
+                            echo "source '${GCLOUD_SDK_PATH}/completion.zsh.inc'" >> "${HOME}/.zshrc"
                         fi
-                        echo -e "    ${YELLOW}🔔 Initializing Google Cloud SDK... Please follow the prompts.${RESET}"
-                        "${HOME}/Applications/google-cloud-sdk/bin/gcloud" init
-                        echo "    Installing kubectl component..."
-                        "${HOME}/Applications/google-cloud-sdk/bin/gcloud" components install kubectl --quiet
-                        echo "    Installing gke-gcloud-auth-plugin component..."
-                        "${HOME}/Applications/google-cloud-sdk/bin/gcloud" components install gke-gcloud-auth-plugin --quiet
+                        echo -e "    ${YELLOW}🔔 Initializing Google Cloud SDK... Please follow the prompts (or use --quiet for gcloud init if fully non-interactive is desired).${RESET}"
+                        "$GCLOUD_BIN" init # gcloud init is interactive by design, cannot be fully silenced easily unless pre-configured.
+                        
+                        echo "    Installing gcloud components (kubectl, gke-gcloud-auth-plugin) silently..."
+                        "$GCLOUD_BIN" components install kubectl --quiet
+                        "$GCLOUD_BIN" components install gke-gcloud-auth-plugin --quiet
+                        
                         if [ -L /usr/local/bin/kubectl ] || [ ! -e /usr/local/bin/kubectl ]; then
-                           sudo ln -sf "${HOME}/Applications/google-cloud-sdk/bin/kubectl" /usr/local/bin/kubectl
+                           sudo ln -sf "${GCLOUD_SDK_PATH}/bin/kubectl" /usr/local/bin/kubectl
                            echo "    Created symlink for kubectl."
                         fi
                     else
-                        echo -e "    ${RED}❌ Google Cloud SDK installation failed. See official docs.${RESET}"
+                        echo -e "    ${RED}❌ Google Cloud SDK core installation failed. See official docs.${RESET}"
                     fi
                 else
                     echo -e "    ${GREEN}✅ Google Cloud SDK already installed.${RESET}"
-                     # Ensure components are there if gcloud is already installed
-                    echo "    Verifying/installing gcloud components: kubectl, gke-gcloud-auth-plugin..."
-                    "${HOME}/Applications/google-cloud-sdk/bin/gcloud" components install kubectl --quiet
-                    "${HOME}/Applications/google-cloud-sdk/bin/gcloud" components install gke-gcloud-auth-plugin --quiet
-                    if [ -L /usr/local/bin/kubectl ] || [ ! -e /usr/local/bin/kubectl ]; then
-                        sudo ln -sf "${HOME}/Applications/google-cloud-sdk/bin/kubectl" /usr/local/bin/kubectl
-                        echo "    Ensured symlink for kubectl."
+                    echo "    Verifying/installing gcloud components (kubectl, gke-gcloud-auth-plugin) silently..."
+                    # Ensure GCLOUD_BIN is defined even if SDK was pre-existing
+                    if [ ! -x "$GCLOUD_BIN" ]; then # Try to find gcloud if path not set from install
+                        GCLOUD_BIN=$(which gcloud || echo "gcloud") # Fallback to just 'gcloud' if not in specific path
+                    fi
+                    
+                    if [ -x "$GCLOUD_BIN" ] && [ "$GCLOUD_BIN" != "gcloud" ]; then # Found it
+                        "$GCLOUD_BIN" components install kubectl --quiet
+                        "$GCLOUD_BIN" components install gke-gcloud-auth-plugin --quiet
+                        if [ -L /usr/local/bin/kubectl ] || [ ! -e /usr/local/bin/kubectl ]; then
+                            sudo ln -sf "${GCLOUD_SDK_PATH}/bin/kubectl" /usr/local/bin/kubectl
+                            echo "    Ensured symlink for kubectl."
+                        fi
+                    elif command -v gcloud &>/dev/null; then # gcloud is in PATH but not our specific GCLOUD_SDK_PATH
+                        gcloud components install kubectl --quiet
+                        gcloud components install gke-gcloud-auth-plugin --quiet
+                         # Symlink for kubectl might still be useful if not already managed by user's gcloud setup
+                        KUBECTL_PATH=$(which kubectl)
+                        if [ "${KUBECTL_PATH}" != "/usr/local/bin/kubectl" ] && ([ -L /usr/local/bin/kubectl ] || [ ! -e /usr/local/bin/kubectl ]); then
+                           echo "    ${YELLOW}Note: kubectl found at $KUBECTL_PATH. Symlink to /usr/local/bin/kubectl not forced if already present elsewhere.${RESET}"
+                        fi 
+                    else
+                        echo "    ${RED}❌ gcloud command not found. Cannot install components.${RESET}"
                     fi
                 fi
                 ;;
             gcloud_util)
                 # gkc.sh installation, depends on gcloud being installed first
-                if [ -f "${HOME}/Applications/google-cloud-sdk/bin/gsutil" ]; then
-                    if [ ! -f "$app_path_name" ]; then # $app_path_name is the full path like ~/Applications/google-cloud-sdk/bin/gkc.sh
+                GCLOUD_SDK_PATH="${HOME}/Applications/google-cloud-sdk"
+                GSUTIL_BIN="${GCLOUD_SDK_PATH}/bin/gsutil"
+                GKC_SH_TARGET_PATH="$app_path_name" # This is the full path like ~/Applications/google-cloud-sdk/bin/gkc.sh
+                GSUTIL_CMD=$(which gsutil || echo "$GSUTIL_BIN")
+
+                if [ -x "$GSUTIL_CMD" ]; then
+                    if [ ! -f "$GKC_SH_TARGET_PATH" ]; then 
                         echo "    Installing $display_name..."
-                        "${HOME}/Applications/google-cloud-sdk/bin/gsutil" cp "gs://adh-tools/gkc.sh" "${app_path_name%/*}/" # Copy to its directory
-                        chmod u+x "$app_path_name"
+                        # Ensure directory exists
+                        mkdir -p "${GKC_SH_TARGET_PATH%/*}"
+                        "$GSUTIL_CMD" cp "gs://adh-tools/gkc.sh" "${GKC_SH_TARGET_PATH%/*}/"
+                        chmod u+x "$GKC_SH_TARGET_PATH"
                         if [ -L /usr/local/bin/gkc.sh ] || [ ! -e /usr/local/bin/gkc.sh ]; then
-                            sudo ln -sf "$app_path_name" /usr/local/bin/gkc.sh
+                            sudo ln -sf "$GKC_SH_TARGET_PATH" /usr/local/bin/gkc.sh
                         fi
-                        if [ -f "$app_path_name" ]; then echo -e "    ${GREEN}✅ $display_name installed.${RESET}"; else echo -e "    ${RED}❌ $display_name installation failed.${RESET}"; fi
+                        if [ -f "$GKC_SH_TARGET_PATH" ]; then echo -e "    ${GREEN}✅ $display_name installed.${RESET}"; else echo -e "    ${RED}❌ $display_name installation failed.${RESET}"; fi
                     else
                         echo -e "    ${GREEN}✅ $display_name already installed.${RESET}"
                     fi
                 else
-                    echo -e "    ${YELLOW}⚠️ Cannot install $display_name because Google Cloud SDK (gsutil) is not found in the expected location.${RESET}"
+                    echo -e "    ${YELLOW}⚠️ Cannot install $display_name because Google Cloud SDK (gsutil) is not found.${RESET}"
                 fi
                 ;;
             security_verify_ps) # Handles Automox installation
@@ -424,7 +438,6 @@ do_installation() {
                         if [ -n "$AUTOMOX_ACCESS_KEY" ]; then
                             echo "    Installing Automox... (This will require sudo password)"
                             curl -sS "https://console.automox.com/downloadInstaller?accesskey=${AUTOMOX_ACCESS_KEY}" | sudo bash
-                            # Re-check after install attempt
                             if check_automox; then echo -e "    ${GREEN}✅ Automox installed and appears to be running.${RESET}"; else echo -e "    ${RED}❌ Automox installation attempted, but it does not appear to be running. Check logs.${RESET}"; fi
                         else
                             echo -e "    ${YELLOW}⚠️ Automox access key not provided. Skipping installation. Use --automox-key <key>.${RESET}"
@@ -500,6 +513,33 @@ while [[ "$#" -gt 0 ]]; do
                 shift 2
             else
                 echo -e "${RED}❌ Error: --automox-key option requires an argument.${RESET}" >&2
+                usage
+            fi
+            ;;
+        --sentinelone-token)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                SENTINELONE_TOKEN="$2"
+                shift 2
+            else
+                echo -e "${RED}❌ Error: --sentinelone-token option requires an argument.${RESET}" >&2
+                usage
+            fi
+            ;;
+        --sentinelone-link)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                SENTINELONE_DOWNLOAD_LINK="$2"
+                shift 2
+            else
+                echo -e "${RED}❌ Error: --sentinelone-link option requires an argument.${RESET}" >&2
+                usage
+            fi
+            ;;
+        --sentinelone-pkg-name)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                SENTINELONE_PKG_NAME="$2"
+                shift 2
+            else
+                echo -e "${RED}❌ Error: --sentinelone-pkg-name option requires an argument.${RESET}" >&2
                 usage
             fi
             ;;
