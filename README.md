@@ -10,7 +10,7 @@ This script helps set up a MacOS development environment by checking for and ins
 
 *   **Certification Mode**: Checks if all required tools for a given profile are installed and reports missing items.
 *   **Installation Mode**: Installs missing tools for the selected profile. This includes Automox (if an access key is provided) and SentinelOne (if a token is provided; download URL is fixed).
-*   **Profile-based Setup**: Supports different configurations for 'engineering' and 'other' user profiles. Defaults to 'other' if no profile is specified.
+*   **Profile-based Setup**: Supports different configurations for 'engineering', 'data', and 'other' user profiles. Defaults to 'other' if no profile is specified.
 
 ### Requirements:
 
@@ -34,9 +34,19 @@ This script helps set up a MacOS development environment by checking for and ins
         ./setup.sh --help
         ```
 
-    *   **Check missing tools (Certification) for the 'engineering' profile:**
+    *   **Check missing tools for the 'engineering' profile:**
         ```bash
         ./setup.sh --certification --profile engineering
+        ```
+
+    *   **Check missing tools for the 'data' profile:**
+        ```bash
+        ./setup.sh --certification --profile data
+        ```
+
+    *   **Install tools for the 'data' profile (example with SentinelOne):**
+        ```bash
+        ./setup.sh --install --profile data --sentinelone-token YOUR_S1_TOKEN
         ```
 
     *   **Install tools for the 'engineering' profile, including Automox and SentinelOne:**
@@ -66,11 +76,13 @@ This script helps set up a MacOS development environment by checking for and ins
 
 ### Managed Tools (Profile Dependent):
 
-*   **All Profiles:** Homebrew, Slack, Twingate, NordPass, Google Cloud SDK, jq.
+*   **All Profiles (Baseline for 'other', 'engineering', 'data'):** Homebrew, Slack, Twingate, NordPass, Google Cloud SDK, jq.
     *   *Security Verification/Installation:*
         *   Automox (verification in cert mode; installation in install mode if `--automox-key` is provided)
         *   SentinelOne (verification in cert mode; installation in install mode if `--sentinelone-token` is provided; download URL is fixed in the script)
-*   **Engineering Profile (includes 'All' plus):** k9s, GitHub CLI (gh), Docker, Cursor, DBeaver Community, Visual Studio Code, gkc.sh utility.
+*   **Data Profile (includes 'All' plus):** Cursor, DBeaver Community, Visual Studio Code.
+*   **Engineering Profile (includes 'All' and 'Data' tools plus):** k9s, GitHub CLI (gh), Docker, gkc.sh utility.
+    *(Note: Engineering effectively gets everything common, plus data-specific tools, plus its own specific tools)*
 
 ### Important Notes:
 

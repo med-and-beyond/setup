@@ -37,9 +37,9 @@ APPS_DEFINITIONS=(
     "slack;Slack;cask;all;slack;Slack;"
     "twingate;Twingate;cask;all;twingate;Twingate;"
     "nordpass;NordPass;cask;all;nordpass;NordPass;"
-    "cursor;Cursor;cask;engineering;cursor;Cursor;"
-    "dbeaver-community;DBeaver Community;cask;engineering;dbeaver-community;DBeaver;"
-    "visual-studio-code;Visual Studio Code;cask;engineering;visual-studio-code;Visual Studio Code;"
+    "cursor;Cursor;cask;engineering,data;cursor;Cursor;"
+    "dbeaver-community;DBeaver Community;cask;engineering,data;dbeaver-community;DBeaver;"
+    "visual-studio-code;Visual Studio Code;cask;engineering,data;visual-studio-code;Visual Studio Code;"
 
     # gkc.sh - Depends on gcloud SDK (specifically gsutil) being installed
     "gkc;gkc.sh;gcloud_util;engineering;;${HOME}/Applications/google-cloud-sdk/bin/gkc.sh;gkc.sh"
@@ -66,7 +66,7 @@ Options:
     -h, --help                      Show this help message
     -c, --certification           Check and notify what tools are missing
     -i, --install                 Install all required tools
-    --profile <name>            Specify user profile (engineering or other). Defaults to 'other'.
+    --profile <name>            Specify user profile (engineering, data, or other). Defaults to 'other'.
     --automox-key <key>         Specify the Automox access key for installation.
     --sentinelone-token <token> Specify the SentinelOne registration token for installation.
     --sentinelone-pkg-name <name> (Optional) Specify the SentinelOne PKG filename (defaults to SentinelOneInstaller.pkg).
@@ -74,7 +74,8 @@ Options:
 Examples:
     $0 --help
     $0 --certification --profile engineering
-    $0 --install --profile engineering --automox-key YOUR_AM_KEY --sentinelone-token YOUR_S1_TOKEN
+    $0 --certification --profile data
+    $0 --install --profile data --sentinelone-token YOUR_S1_TOKEN
 
 This script will manage the installation and verification of tools
 based on the selected profile. SentinelOne download URL is fixed.
@@ -352,44 +353,46 @@ do_installation() {
                     echo "    🤔 Google Cloud SDK (gcloud command) not found in PATH. Attempting installation..."
                     mkdir -p "${HOME}/Applications" # Ensure target directory exists
                     echo "    ☁️ Downloading and installing Google Cloud SDK to $GCLOUD_INSTALL_DIR..."
-                    # Use --quiet for the SDK installer itself
-                    if (cd "${HOME}/Applications" && curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --quiet --install-dir="${GCLOUD_INSTALL_DIR}"); then
-                        echo -e "    ${GREEN}✅ Google Cloud SDK downloaded successfully.${RESET}"
-                        touch "$GCLOUD_INSTALLED_HERE_FLAG" # Mark that we installed it
+                    
+                    if (cd "${HOME}/Applications" && curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir="${GCLOUD_INSTALL_DIR}"); then
+                        echo -e "    ${GREEN}✅ Google Cloud SDK downloaded and installation script executed successfully.${RESET}"
+                        if [ -x "${GCLOUD_INSTALL_DIR}/bin/gcloud" ]; then
+                            echo -e "    ${GREEN}✅ gcloud binary found at ${GCLOUD_INSTALL_DIR}/bin/gcloud.${RESET}"
+                            touch "$GCLOUD_INSTALLED_HERE_FLAG" # Mark that we installed it
 
-                        echo "    🛠️  Configuring shell for Google Cloud SDK (requires terminal restart or sourcing profile)..."
-                        echo "source '${GCLOUD_INSTALL_DIR}/path.bash.inc'" >> "${HOME}/.bash_profile"
-                        echo "source '${GCLOUD_INSTALL_DIR}/completion.bash.inc'" >> "${HOME}/.bash_profile"
-                        if [ -f "${HOME}/.zshrc" ]; then
-                            echo "source '${GCLOUD_INSTALL_DIR}/path.zsh.inc'" >> "${HOME}/.zshrc"
-                            echo "source '${GCLOUD_INSTALL_DIR}/completion.zsh.inc'" >> "${HOME}/.zshrc"
-                        fi
-                        
-                        # Use the newly installed gcloud for init and components
-                        GCLOUD_BIN_TO_USE="${GCLOUD_INSTALL_DIR}/bin/gcloud"
-                        echo -e "    ${YELLOW}🔔 Initializing Google Cloud SDK (using $GCLOUD_BIN_TO_USE)... Please follow the prompts.${RESET}"
-                        "$GCLOUD_BIN_TO_USE" init 
-                        
-                        echo "    🛠️  Installing gcloud components (kubectl, gke-gcloud-auth-plugin) silently..."
-                        "$GCLOUD_BIN_TO_USE" components install kubectl --quiet
-                        "$GCLOUD_BIN_TO_USE" components install gke-gcloud-auth-plugin --quiet
-                        
-                        if [ ! -L /usr/local/bin/kubectl ] && [ ! -e /usr/local/bin/kubectl ]; then # Check if symlink is needed
-                           echo "    🔗 Creating symlink for kubectl to /usr/local/bin/kubectl..."
-                           sudo ln -sf "${GCLOUD_INSTALL_DIR}/bin/kubectl" /usr/local/bin/kubectl
-                           echo -e "    ${GREEN}✅ Kubectl symlink created.${RESET}"
-                        elif [ -L /usr/local/bin/kubectl ]; then
-                           echo -e "    ${GREEN}✅ Kubectl symlink already exists or managed elsewhere.${RESET}"
+                            echo "    🛠️  Configuring shell for Google Cloud SDK (requires terminal restart or sourcing profile)..."
+                            echo "source '${GCLOUD_INSTALL_DIR}/path.bash.inc'" >> "${HOME}/.bash_profile"
+                            echo "source '${GCLOUD_INSTALL_DIR}/completion.bash.inc'" >> "${HOME}/.bash_profile"
+                            if [ -f "${HOME}/.zshrc" ]; then
+                                echo "source '${GCLOUD_INSTALL_DIR}/path.zsh.inc'" >> "${HOME}/.zshrc"
+                                echo "source '${GCLOUD_INSTALL_DIR}/completion.zsh.inc'" >> "${HOME}/.zshrc"
+                            fi
+                            
+                            GCLOUD_BIN_TO_USE="${GCLOUD_INSTALL_DIR}/bin/gcloud"
+                            echo -e "    ${YELLOW}🔔 Initializing Google Cloud SDK (using $GCLOUD_BIN_TO_USE)... Please follow the prompts.${RESET}"
+                            "$GCLOUD_BIN_TO_USE" init 
+                            
+                            echo "    🛠️  Installing gcloud components (kubectl, gke-gcloud-auth-plugin) silently..."
+                            "$GCLOUD_BIN_TO_USE" components install kubectl --quiet
+                            "$GCLOUD_BIN_TO_USE" components install gke-gcloud-auth-plugin --quiet
+                            
+                            if [ ! -L /usr/local/bin/kubectl ] && [ ! -e /usr/local/bin/kubectl ]; then
+                               echo "    🔗 Creating symlink for kubectl to /usr/local/bin/kubectl..."
+                               sudo ln -sf "${GCLOUD_INSTALL_DIR}/bin/kubectl" /usr/local/bin/kubectl
+                               echo -e "    ${GREEN}✅ Kubectl symlink created.${RESET}"
+                            elif [ -L /usr/local/bin/kubectl ]; then
+                               echo -e "    ${GREEN}✅ Kubectl symlink already exists or managed elsewhere.${RESET}"
+                            fi
+                        else
+                            echo -e "    ${RED}❌ Google Cloud SDK installation script ran, but gcloud binary not found at expected location: ${GCLOUD_INSTALL_DIR}/bin/gcloud. Installation likely failed.${RESET}"
                         fi
                     else
-                        echo -e "    ${RED}❌ Google Cloud SDK core installation script failed. Please check output or try manually.${RESET}"
+                        echo -e "    ${RED}❌ Google Cloud SDK core installation script execution failed. Check output above. It might have printed its own help text due to an argument issue.${RESET}"
                     fi
                 else
                     GCLOUD_BIN_TO_USE=$(which gcloud)
                     echo -e "    ${GREEN}✅ Google Cloud SDK (gcloud command found at $GCLOUD_BIN_TO_USE) is already installed or in PATH.${RESET}"
                     
-                    # If gcloud was installed by this script in a *previous* run, GCLOUD_INSTALLED_HERE_FLAG would exist.
-                    # If it was installed manually or by other means, we just use `which gcloud`.
                     if [ -f "$GCLOUD_INSTALLED_HERE_FLAG" ] && [ ! -x "${GCLOUD_INSTALL_DIR}/bin/gcloud" ]; then
                          echo -e "    ${YELLOW}⚠️ SDK was previously installed by this script to $GCLOUD_INSTALL_DIR, but it's not found there now. Using system gcloud at $GCLOUD_BIN_TO_USE.${RESET}"
                     fi
@@ -403,13 +406,11 @@ do_installation() {
                     if ! "$GCLOUD_BIN_TO_USE" components install gke-gcloud-auth-plugin --quiet; then
                         echo -e "    ${RED}❌ Failed to install/verify gke-gcloud-auth-plugin component.${RESET}"
                     else
-                        echo -e "    ${GREEN}✅ gke-gcloud-auth-plugin component verified/installed.${RESET}"
+                        echo -e "    ${GREEN}✅ gke-gcloud-_auth-plugin component verified/installed.${RESET}"
                     fi
                     
-                    # Check symlink for kubectl, even if gcloud was pre-existing
-                    # This is helpful if user installed gcloud but not kubectl symlink
-                    KUBECTL_TARGET_PATH="${GCLOUD_INSTALL_DIR}/bin/kubectl" # Default assumption
-                    if command -v "$GCLOUD_BIN_TO_USE" &>/dev/null && [[ "$GCLOUD_BIN_TO_USE" == *"/bin/gcloud" ]]; then # if it's a full path from `which`
+                    KUBECTL_TARGET_PATH="${GCLOUD_INSTALL_DIR}/bin/kubectl"
+                    if command -v "$GCLOUD_BIN_TO_USE" &>/dev/null && [[ "$GCLOUD_BIN_TO_USE" == *"/bin/gcloud" ]]; then
                         KUBECTL_TARGET_PATH="$(dirname "$GCLOUD_BIN_TO_USE")/kubectl"
                     fi
 
@@ -579,7 +580,7 @@ while [[ "$#" -gt 0 ]]; do
                 SELECTED_PROFILE="$2"
                 shift 2
             else
-                echo -e "${RED}❌ Error: --profile option requires an argument (engineering or other).${RESET}" >&2
+                echo -e "${RED}❌ Error: --profile option requires an argument (engineering, data, or other).${RESET}" >&2
                 usage
             fi
             ;;
@@ -623,8 +624,8 @@ done
 
 # Validate SELECTED_PROFILE
 echo -e "${BLUE}ℹ️ Selected profile: ${YELLOW}$SELECTED_PROFILE${RESET}"
-if [[ "$SELECTED_PROFILE" != "engineering" && "$SELECTED_PROFILE" != "other" ]]; then
-    echo -e "${RED}❌ Error: Invalid profile '$SELECTED_PROFILE'. Choose 'engineering' or 'other'.${RESET}" >&2
+if [[ "$SELECTED_PROFILE" != "engineering" && "$SELECTED_PROFILE" != "other" && "$SELECTED_PROFILE" != "data" ]]; then
+    echo -e "${RED}❌ Error: Invalid profile '$SELECTED_PROFILE'. Choose 'engineering', 'data', or 'other'.${RESET}" >&2
     usage
 fi
 
