@@ -346,19 +346,22 @@ do_installation() {
                 fi
                 ;;
             gcloud_sdk_base)
-                GCLOUD_INSTALL_DIR="${HOME}/Applications/google-cloud-sdk"
+                GCLOUD_PARENT_DIR="${HOME}/Applications" # Parent directory for the SDK
+                GCLOUD_INSTALL_DIR="${GCLOUD_PARENT_DIR}/google-cloud-sdk" # Actual path after install
                 GCLOUD_INSTALLED_HERE_FLAG="${GCLOUD_INSTALL_DIR}/.installed_by_this_script"
 
                 if ! command -v gcloud &> /dev/null; then
                     echo "    🤔 Google Cloud SDK (gcloud command) not found in PATH. Attempting installation..."
-                    mkdir -p "${HOME}/Applications" # Ensure target directory exists
-                    echo "    ☁️ Downloading and installing Google Cloud SDK to $GCLOUD_INSTALL_DIR..."
+                    mkdir -p "${GCLOUD_PARENT_DIR}" # Ensure parent directory exists
+                    echo "    ☁️ Downloading and installing Google Cloud SDK to $GCLOUD_INSTALL_DIR (within $GCLOUD_PARENT_DIR)..."
                     
-                    if (cd "${HOME}/Applications" && curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir="${GCLOUD_INSTALL_DIR}"); then
+                    # Pass the PARENT directory to --install-dir
+                    if (cd "${GCLOUD_PARENT_DIR}" && curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir="${GCLOUD_PARENT_DIR}"); then
                         echo -e "    ${GREEN}✅ Google Cloud SDK downloaded and installation script executed successfully.${RESET}"
+                        # Verify actual presence of gcloud binary
                         if [ -x "${GCLOUD_INSTALL_DIR}/bin/gcloud" ]; then
                             echo -e "    ${GREEN}✅ gcloud binary found at ${GCLOUD_INSTALL_DIR}/bin/gcloud.${RESET}"
-                            touch "$GCLOUD_INSTALLED_HERE_FLAG" # Mark that we installed it
+                            touch "$GCLOUD_INSTALLED_HERE_FLAG"
 
                             echo "    🛠️  Configuring shell for Google Cloud SDK (requires terminal restart or sourcing profile)..."
                             echo "source '${GCLOUD_INSTALL_DIR}/path.bash.inc'" >> "${HOME}/.bash_profile"
@@ -367,7 +370,11 @@ do_installation() {
                                 echo "source '${GCLOUD_INSTALL_DIR}/path.zsh.inc'" >> "${HOME}/.zshrc"
                                 echo "source '${GCLOUD_INSTALL_DIR}/completion.zsh.inc'" >> "${HOME}/.zshrc"
                             fi
-                                                        
+                            
+                            GCLOUD_BIN_TO_USE="${GCLOUD_INSTALL_DIR}/bin/gcloud"
+                            # echo -e "    ${YELLOW}🔔 Initializing Google Cloud SDK (using $GCLOUD_BIN_TO_USE)... Please follow the prompts.${RESET}" # User removed this
+                            # "$GCLOUD_BIN_TO_USE" init 
+                            
                             echo "    🛠️  Installing gcloud components (kubectl, gke-gcloud-auth-plugin) silently..."
                             "$GCLOUD_BIN_TO_USE" components install kubectl --quiet
                             "$GCLOUD_BIN_TO_USE" components install gke-gcloud-auth-plugin --quiet
@@ -386,14 +393,19 @@ do_installation() {
                         echo -e "    ${RED}❌ Google Cloud SDK core installation script execution failed. Check output above. It might have printed its own help text due to an argument issue.${RESET}"
                     fi
                 else
+                    # ... (logic for when gcloud is already in PATH remains the same, but ensure GCLOUD_INSTALL_DIR is correctly referenced for symlinks etc.)
                     GCLOUD_BIN_TO_USE=$(which gcloud)
                     echo -e "    ${GREEN}✅ Google Cloud SDK (gcloud command found at $GCLOUD_BIN_TO_USE) is already installed or in PATH.${RESET}"
                     
+                    # GCLOUD_INSTALL_DIR here should still point to the conventional location if we need to check for our symlink target
+                    # If gcloud is found elsewhere, KUBECTL_TARGET_PATH logic handles it.
+
                     if [ -f "$GCLOUD_INSTALLED_HERE_FLAG" ] && [ ! -x "${GCLOUD_INSTALL_DIR}/bin/gcloud" ]; then
                          echo -e "    ${YELLOW}⚠️ SDK was previously installed by this script to $GCLOUD_INSTALL_DIR, but it's not found there now. Using system gcloud at $GCLOUD_BIN_TO_USE.${RESET}"
                     fi
 
                     echo "    🛠️  Verifying/installing gcloud components (kubectl, gke-gcloud-auth-plugin) silently using $GCLOUD_BIN_TO_USE..."
+                    # ... (component install and symlink logic as before, ensuring KUBECTL_TARGET_PATH is derived correctly) ...
                     if ! "$GCLOUD_BIN_TO_USE" components install kubectl --quiet; then
                         echo -e "    ${RED}❌ Failed to install/verify kubectl component.${RESET}"
                     else
@@ -405,8 +417,8 @@ do_installation() {
                         echo -e "    ${GREEN}✅ gke-gcloud-_auth-plugin component verified/installed.${RESET}"
                     fi
                     
-                    KUBECTL_TARGET_PATH="${GCLOUD_INSTALL_DIR}/bin/kubectl"
-                    if command -v "$GCLOUD_BIN_TO_USE" &>/dev/null && [[ "$GCLOUD_BIN_TO_USE" == *"/bin/gcloud" ]]; then
+                    KUBECTL_TARGET_PATH="${GCLOUD_INSTALL_DIR}/bin/kubectl" # Still useful for desired symlink target
+                    if command -v "$GCLOUD_BIN_TO_USE" &>/dev/null && [[ "$GCLOUD_BIN_TO_USE" == *"/bin/gcloud" ]]; then 
                         KUBECTL_TARGET_PATH="$(dirname "$GCLOUD_BIN_TO_USE")/kubectl"
                     fi
 
