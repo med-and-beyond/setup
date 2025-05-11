@@ -210,58 +210,54 @@ do_certification() {
             continue
         fi
 
-        #echo -e "🤔 Checking $display_name... " # Start the line
-
-        local check_status=1 # Default to fail (1)
+        # Print initial check message. The helper functions will print their own status with emoji.
+        echo -n "🤔 Checking $display_name... "
 
         case "$type" in
             core_tool)
                 if [[ "$id" == "homebrew" ]]; then
-                    if check_brew; then check_status=0; else ((missing_tools++)); fi
+                    # Let check_brew print its full line including emoji
+                    if ! check_brew; then ((missing_tools++)); fi
                 fi
                 ;;
             cli)
-                if check_command "$cmd_name" "$display_name"; then check_status=0; else ((missing_tools++)); fi
+                # Let check_command print its full line including emoji
+                if ! check_command "$cmd_name" "$display_name"; then ((missing_tools++)); fi
                 ;;
             cask)
-                if check_app_installation "$brew_name" "$app_path_name" "$display_name"; then check_status=0; else ((missing_tools++)); fi
+                # Let check_app_installation print its full line including emoji
+                if ! check_app_installation "$brew_name" "$app_path_name" "$display_name"; then ((missing_tools++)); fi
                 ;;
             gcloud_sdk_base)
-                if check_command "$cmd_name" "$display_name"; then check_status=0; else ((missing_tools++)); fi
+                # Let check_command print its full line for gcloud
+                if ! check_command "$cmd_name" "$display_name"; then ((missing_tools++)); fi
                 ;;
             gcloud_util)
-                # This one has custom echo, so we handle it differently to append emoji
+                # This one has custom echo logic already including emoji in do_certification
                 if [ ! -f "$app_path_name" ]; then
-                    echo -e "${RED}❌ $display_name is not installed at $app_path_name${RESET} ❌"
+                    echo -e "${RED}❌ $display_name is not installed at $app_path_name${RESET}" 
                     ((missing_tools++))
-                    check_status=1 # Explicitly failed
                 else
                     echo -e "${GREEN}✅ $display_name is installed${RESET}"
-                    check_status=0 # Explicitly passed
                 fi
-                continue # Already printed emoji, skip common emoji echo
                 ;;
             security_verify_path)
-                if check_application "$app_path_name" "$display_name"; then check_status=0; else ((missing_tools++)); fi
+                # Let check_application print its full line including emoji
+                if ! check_application "$app_path_name" "$display_name"; then ((missing_tools++)); fi
                 ;;
             security_verify_ps)
-                # This one also has custom echo
+                # This one has custom echo logic already including emoji in do_certification
                 if ps -ef | grep -v grep | grep -q "$cmd_name"; then
-                    echo -e "${GREEN}✅ $display_name is installed and running${RESET}"
-                    check_status=0 # Explicitly passed
+                    echo -e "${GREEN}✅ $display_name is installed and running${RESET}" 
                 else
-                    echo -e "${RED}❌ $display_name is not installed or not running${RESET}"
+                    echo -e "${RED}❌ $display_name is not installed or not running${RESET}" 
                     ((missing_tools++))
-                    check_status=1 # Explicitly failed
                 fi
-                continue # Already printed emoji, skip common emoji echo
                 ;;
             *)
                 echo -e "${YELLOW}⚠️ Warning: Unknown app type '$type' for $display_name${RESET}"
-                check_status=1 # Consider unknown as a failed check for this item
                 ;;
         esac
-
     done
 
     echo -e "\n${BLUE}🛡️  CHECKING GENERAL SECURITY:${RESET}"
