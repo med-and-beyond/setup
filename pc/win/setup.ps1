@@ -48,7 +48,7 @@ $AppsDefinitions = @(
     @{ ID = "chocolatey"; DisplayName = "Chocolatey Package Manager"; Type = "core_packagemanager"; Profiles = "all"; VerificationCommand = "choco --version" }
 
     # Google Cloud SDK
-    @{ ID = "google-cloud-sdk"; DisplayName = "Google Cloud SDK"; Type = "direct_download"; Profiles = "all"; DownloadUrl = "https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe"; VerificationPath = "$($env:ProgramFiles)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd" }
+    @{ ID = "google-cloud-sdk"; DisplayName = "Google Cloud SDK"; Type = "direct_download"; Profiles = "all"; DownloadUrl = "https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe"; VerificationPath = "$env:ProgramFiles\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd" }
 
     # CLI tools
     @{ ID = "jq"; DisplayName = "jq"; Type = "choco"; Profiles = "all"; ChocoPackageName = "jq"; VerificationCommand = "jq --version" }
@@ -58,7 +58,7 @@ $AppsDefinitions = @(
     # GUI Applications (many available via Chocolatey)
     @{ ID = "docker"; DisplayName = "Docker Desktop"; Type = "choco"; Profiles = "engineering"; ChocoPackageName = "docker-desktop"; VerificationPath = "$($env:ProgramFiles)\Docker\Docker\Docker Desktop.exe" }
     @{ ID = "slack"; DisplayName = "Slack"; Type = "choco"; Profiles = "all"; ChocoPackageName = "slack"; VerificationPath = "$($env:LOCALAPPDATA)\Slack\slack.exe" }
-    @{ ID = "twingate"; DisplayName = "Twingate"; Type = "manual_download"; Profiles = "all"; VerificationPath = "$($env:ProgramFiles)\Twingate\Twingate.exe" }
+    @{ ID = "twingate"; DisplayName = "Twingate"; Type = "direct_download"; Profiles = "all"; DownloadUrl = "https://www.twingate.com/download/Twingate-windows-x86_64.msi"; VerificationPath = "$($env:ProgramFiles)\Twingate\Twingate.exe" }
     @{ ID = "nordpass"; DisplayName = "NordPass"; Type = "direct_download"; Profiles = "all"; DownloadUrl = "https://downloads.npass.app/windows/NordPassSetup.exe"; VerificationPath = "$($env:LOCALAPPDATA)\Programs\NordPass\NordPass.exe" }
     @{ ID = "cursor"; DisplayName = "Cursor"; Type = "direct_download"; Profiles = "engineering,data"; DownloadUrl = "https://download.cursor.sh/windows/Cursor-Setup.exe"; VerificationPath = "$($env:LOCALAPPDATA)\Programs\cursor\Cursor.exe" }
     @{ ID = "dbeaver"; DisplayName = "DBeaver Community"; Type = "choco"; Profiles = "engineering,data"; ChocoPackageName = "dbeaver"; VerificationPath = "$($env:ProgramFiles)\DBeaver\dbeaver.exe" }
@@ -97,6 +97,40 @@ function Test-IsAppForProfile($AppProfiles) {
     return $false
 }
 
+function Test-IsGoogleCloudSdkInstalled {
+    # Check multiple possible locations for gcloud
+    $gcloudPaths = @(
+        "$($env:ProgramFiles)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd",
+        "$($env:ProgramFiles)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.exe",
+        "$($env:ProgramFiles)\Google\Cloud SDK\bin\gcloud.cmd",
+        "$($env:ProgramFiles)\Google\Cloud SDK\bin\gcloud.exe",
+        "${env:ProgramFiles(x86)}\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd",
+        "${env:ProgramFiles(x86)}\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.exe",
+        "${env:ProgramFiles(x86)}\Google\Cloud SDK\bin\gcloud.cmd",
+        "${env:ProgramFiles(x86)}\Google\Cloud SDK\bin\gcloud.exe",
+        "$env:LOCALAPPDATA\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd",
+        "$env:LOCALAPPDATA\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.exe",
+        "$HOME\google-cloud-sdk\bin\gcloud.cmd",
+        "$HOME\google-cloud-sdk\bin\gcloud.exe",
+        "$env:APPDATA\gcloud\bin\gcloud.cmd",
+        "$env:APPDATA\gcloud\bin\gcloud.exe"
+    )
+    
+    foreach ($path in $gcloudPaths) {
+        if (Test-Path $path -PathType Leaf) {
+            return @{
+                Installed = $true
+                Path = $path
+            }
+        }
+    }
+    
+    return @{
+        Installed = $false
+        Path = $null
+    }
+}
+
 function Invoke-Certification {
     Write-HostColorized "Performing certification for profile: $($Profile.ToUpper())" $ColorBlue
     Write-HostColorized "Checking required tools..." $ColorYellow
@@ -116,33 +150,13 @@ function Invoke-Certification {
         
         # Special case for Google Cloud SDK
         if ($appDef.ID -eq "google-cloud-sdk") {
-            # Try multiple possible installation paths for gcloud
-            $gcloudPaths = @(
-                "$($env:ProgramFiles)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd",
-                "$($env:ProgramFiles)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.exe",
-                "$($env:ProgramFiles)\Google\Cloud SDK\bin\gcloud.cmd",
-                "$($env:ProgramFiles)\Google\Cloud SDK\bin\gcloud.exe",
-                "$env:LOCALAPPDATA\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd",
-                "$env:LOCALAPPDATA\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.exe",
-                "$HOME\google-cloud-sdk\bin\gcloud.cmd",
-                "$HOME\google-cloud-sdk\bin\gcloud.exe",
-                "$env:APPDATA\gcloud\bin\gcloud.cmd",
-                "$env:APPDATA\gcloud\bin\gcloud.exe"
-            )
+            $gcloudCheck = Test-IsGoogleCloudSdkInstalled
             
-            $gcloudPath = $null
-            foreach ($path in $gcloudPaths) {
-                if (Test-Path $path -PathType Leaf) {
-                    $gcloudPath = $path
-                    $installed = $true
-                    break
-                }
-            }
-            
-            if ($installed) {
+            if ($gcloudCheck.Installed) {
+                $installed = $true
                 Write-HostColorized "[OK]" $ColorGreen
-                $binPath = Split-Path -Parent $gcloudPath
-                Write-HostColorized "  Found at: $gcloudPath" $ColorGreen
+                $binPath = Split-Path -Parent $gcloudCheck.Path
+                Write-HostColorized "  Found at: $($gcloudCheck.Path)" $ColorGreen
                 
                 # Update PATH if gcloud directory is not in PATH
                 $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
@@ -242,7 +256,27 @@ function Invoke-Installation {
         
         # Check if already installed
         $alreadyInstalled = $false
-        if ($appDef.VerificationCommand) {
+        
+        # Special handling for Google Cloud SDK before attempting installation
+        if ($appDef.ID -eq "google-cloud-sdk") {
+            $gcloudCheck = Test-IsGoogleCloudSdkInstalled
+            
+            if ($gcloudCheck.Installed) {
+                $alreadyInstalled = $true
+                Write-HostColorized "  Google Cloud SDK already installed at: $($gcloudCheck.Path)" $ColorGreen
+                
+                # Update PATH if necessary
+                $binPath = Split-Path -Parent $gcloudCheck.Path
+                $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+                if (-not $currentPath.Contains($binPath)) {
+                    Write-HostColorized "  Adding Google Cloud SDK to your PATH..." $ColorYellow
+                    [Environment]::SetEnvironmentVariable("PATH", "$currentPath;$binPath", "User")
+                    Write-HostColorized "  PATH updated. You'll need to restart your terminal to use gcloud commands." $ColorYellow
+                } else {
+                    Write-HostColorized "  Google Cloud SDK is already in your PATH." $ColorGreen
+                }
+            }
+        } elseif ($appDef.VerificationCommand) {
             try {
                 Invoke-Expression $appDef.VerificationCommand -ErrorAction Stop -OutVariable null | Out-Null
                 $alreadyInstalled = $true
@@ -258,7 +292,7 @@ function Invoke-Installation {
         }
         
         if ($alreadyInstalled) {
-            continue
+            continue  # Skip installation if already installed
         }
         
         # Install based on type
@@ -327,33 +361,12 @@ function Invoke-Installation {
                     
                     # Special handling for Google Cloud SDK
                     if ($appDef.ID -eq "google-cloud-sdk") {
-                        Write-HostColorized "  Looking for installed Google Cloud SDK..." $ColorYellow
+                        # Look for installed Google Cloud SDK after installation
+                        $gcloudCheck = Test-IsGoogleCloudSdkInstalled
                         
-                        # Try multiple possible installation paths for gcloud
-                        $gcloudPaths = @(
-                            "$($env:ProgramFiles)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd",
-                            "$($env:ProgramFiles)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.exe",
-                            "$($env:ProgramFiles)\Google\Cloud SDK\bin\gcloud.cmd",
-                            "$($env:ProgramFiles)\Google\Cloud SDK\bin\gcloud.exe",
-                            "$env:LOCALAPPDATA\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd",
-                            "$env:LOCALAPPDATA\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.exe",
-                            "$HOME\google-cloud-sdk\bin\gcloud.cmd",
-                            "$HOME\google-cloud-sdk\bin\gcloud.exe",
-                            "$env:APPDATA\gcloud\bin\gcloud.cmd",
-                            "$env:APPDATA\gcloud\bin\gcloud.exe"
-                        )
-                        
-                        $gcloudPath = $null
-                        foreach ($path in $gcloudPaths) {
-                            if (Test-Path $path -PathType Leaf) {
-                                $gcloudPath = $path
-                                break
-                            }
-                        }
-                        
-                        if ($gcloudPath) {
-                            $binPath = Split-Path -Parent $gcloudPath
-                            Write-HostColorized "  Found Google Cloud SDK at: $gcloudPath" $ColorGreen
+                        if ($gcloudCheck.Installed) {
+                            $binPath = Split-Path -Parent $gcloudCheck.Path
+                            Write-HostColorized "  Found Google Cloud SDK at: $($gcloudCheck.Path)" $ColorGreen
                             
                             # Update PATH if gcloud directory is not in PATH
                             $currentPath = [Environment]::GetEnvironmentVariable("PATH", "User")
