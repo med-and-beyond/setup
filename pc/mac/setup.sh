@@ -1,5 +1,55 @@
 #!/bin/bash
 
+# --- Global Configuration and Definitions ---
+
+# Selected Profile: Stores the chosen profile, defaults to 'other'
+SELECTED_PROFILE="other"
+AUTOMOX_ACCESS_KEY="" # Variable to store Automox access key
+
+# Color Codes
+RED=$(tput setaf 1)
+GREEN=$(tput setaf 2)
+YELLOW=$(tput setaf 3)
+BLUE=$(tput setaf 4)
+RESET=$(tput sgr0)
+
+# APP_DEF_FIELDS: ID;DisplayName;Type;Profiles;BrewName;AppNameForPathCheck;CommandNameForCLI
+# Type: cli, cask, gcloud_sdk_base, gcloud_util, security_verify_path, security_verify_ps, core_tool (homebrew)
+# Profiles: comma-separated list e.g., "all", "engineering", "other,engineering"
+APPS_DEFINITIONS=(
+    # Core tool - special handling
+    "homebrew;Homebrew;core_tool;all;;;brew"
+
+    # CLI tools
+    "k9s;k9s;cli;engineering;k9s;;k9s"
+    "jq;jq;cli;all;jq;;jq"
+    "gh;GitHub CLI;cli;engineering;gh;;gh"
+
+    # Cask applications
+    "docker;Docker;cask;engineering;docker;Docker;"
+    "slack;Slack;cask;all;slack;Slack;"
+    "twingate;Twingate;cask;all;twingate;Twingate;"
+    "nordpass;NordPass;cask;all;nordpass;NordPass;"
+    "cursor;Cursor;cask;engineering;cursor;Cursor;"
+    "dbeaver-community;DBeaver Community;cask;engineering;dbeaver-community;DBeaver;" # AppNameForPathCheck should be "DBeaver"
+    "visual-studio-code;Visual Studio Code;cask;engineering;visual-studio-code;Visual Studio Code;"
+
+    # Google Cloud SDK - special handling for install, check gcloud command
+    "google-cloud-sdk;Google Cloud SDK;gcloud_sdk_base;engineering;;;gcloud"
+    # gkc.sh - special handling: file check, symlink install, tied to gcloud sdk install
+    "gkc;gkc.sh;gcloud_util;engineering;;${HOME}/Applications/google-cloud-sdk/bin/gkc.sh;gkc.sh"
+
+    # Security Verification Only tools (installed by IT, script just checks)
+    "sentinelone;SentinelOne;security_verify_path;all;;SentinelOne/SentinelOne Extensions;"
+    "automox;Automox;security_verify_ps;all;;;amagent" # process name to grep
+)
+
+# --- Function Definitions (usage, check_*, do_certification, do_installation) ---
+# NOTE: The actual definitions of these functions are assumed to be present above the main script logic.
+# The following is where the main script logic (parsing and execution) begins.
+# We are re-inserting this block that was modified in the previous step,
+# ensuring color definitions are at the top and new echos use colors.
+
 # Function to display usage
 usage() {
     cat << EOF
@@ -8,33 +58,20 @@ Usage: $0 [OPTIONS]
 A utility to manage development environment setup for MacOS.
 
 Options:
-    -h, --help          Show this help message
-    -c, --certification Check and notify what tools are missing
-    -i, --install       Install all required tools
+    -h, --help                Show this help message
+    -c, --certification       Check and notify what tools are missing
+    -i, --install             Install all required tools
+    --profile <name>        Specify user profile (engineering or other). Defaults to 'other'.
+    --automox-key <key>     Specify the Automox access key for installation.
 
 Examples:
-    $0 --help           # Show this help message
-    $0 --certification  # Check what tools are missing
-    $0 --install       # Install all required tools
-    $0 -c -i           # Check and install in one command
+    $0 --help
+    $0 --certification --profile engineering
+    $0 --install --profile engineering
+    $0 --install --profile engineering --automox-key YOUR_KEY_HERE
 
-This script will manage the installation and verification of:
-    - Homebrew
-    - k9s
-    - jq
-    - Docker
-    - Slack
-    - Twingate
-    - Google Cloud SDK
-    - gkc.sh utility
-    - NordPass
-    - Cursor
-    - DBeaver Community
-    - Visual Studio Code
-    - Automox (verification only)
-    - SentinelOne (verification only)
-
-Note: This script is intended for MacOS only.
+This script will manage the installation and verification of tools
+based on the selected profile.
 EOF
     exit 1
 }
@@ -46,10 +83,10 @@ check_application() {
 
     # Check in both system and user Applications folders
     if [ -d "/Applications/${app_name}.app" ] || [ -d "$HOME/Applications/${app_name}.app" ]; then
-        echo "[OK] $display_name is installed"
+        echo "✅ $display_name is installed"
         return 0
     else
-        echo "[MISSING] $display_name is not installed"
+        echo "❌ $display_name is not installed"
         return 1
     fi
 }
@@ -57,10 +94,10 @@ check_application() {
 # Function to check if a command exists
 check_command() {
     if ! command -v $1 &> /dev/null; then
-        echo "[MISSING] $2 is not installed"
+        echo "❌ $2 is not installed"
         return 1
     else
-        echo "[OK] $2 is installed"
+        echo "✅ $2 is installed"
         return 0
     fi
 }
@@ -73,14 +110,14 @@ check_app_installation() {
 
     # First check if installed via brew
     if brew list --cask $brew_name &>/dev/null; then
-        echo "[OK] $display_name is installed (via Homebrew)"
+        echo "✅ $display_name is installed (via Homebrew)"
         return 0
     # Then check in Applications folders
     elif [ -d "/Applications/${app_name}.app" ] || [ -d "$HOME/Applications/${app_name}.app" ]; then
-        echo "[OK] $display_name is installed (via direct installation)"
+        echo "✅ $display_name is installed (via direct installation)"
         return 0
     else
-        echo "[MISSING] $display_name is not installed"
+        echo "❌ $display_name is not installed"
         return 1
     fi
 }
@@ -89,10 +126,10 @@ check_app_installation() {
 # Function to check if a Homebrew cask is installed
 check_cask() {
     if ! brew list --cask $1 &>/dev/null; then
-        echo "[MISSING] $2 is not installed"
+        echo "❌ $2 is not installed"
         return 1
     else
-        echo "[OK] $2 is installed"
+        echo "✅ $2 is installed"
         return 0
     fi
 }
@@ -100,10 +137,10 @@ check_cask() {
 # Function to check brew installation
 check_brew() {
     if ! command -v brew &> /dev/null; then
-        echo "[MISSING] Homebrew is not installed"
+        echo "❌ Homebrew is not installed"
         return 1
     else
-        echo "[OK] Homebrew is installed"
+        echo "✅ Homebrew is installed"
         return 0
     fi
 }
@@ -111,10 +148,10 @@ check_brew() {
 # Function to check if SentinelOne is properly installed
 check_sentinelone() {
     if [ -d "/Applications/SentinelOne/SentinelOne Extensions.app" ]; then
-        echo "[OK] SentinelOne is installed"
+        echo "✅ SentinelOne is installed"
         return 0
     else
-        echo "[MISSING] SentinelOne is not installed"
+        echo "❌ SentinelOne is not installed"
         return 1
     fi
 }
@@ -122,81 +159,124 @@ check_sentinelone() {
 # Function to check if Automox is properly installed
 check_automox() {
     if ps -ef | grep -v grep | grep -q "amagent"; then
-        echo "[OK] Automox is installed and running"
+        echo "✅ Automox is installed and running"
         return 0
     else
-        echo "[MISSING] Automox is not installed or not running"
+        echo "❌ Automox is not installed or not running"
         return 1
+    fi
+}
+
+# Function to check if the current app definition is relevant for the SELECTED_PROFILE
+# $1: App's defined profiles (comma-separated string, e.g., "all,engineering")
+# Returns 0 if relevant, 1 if not.
+is_app_for_profile() {
+    local app_profiles="$1"
+    if [[ ",${app_profiles}," == *",all,"* || ",${app_profiles}," == *",${SELECTED_PROFILE},"* ]]; then
+        return 0 # Relevant
+    else
+        return 1 # Not relevant
     fi
 }
 
 # Function to perform certification
 do_certification() {
-    echo "Checking required tools..."
+    echo -e "${BLUE}🚀 Performing certification for profile: ${YELLOW}$SELECTED_PROFILE${RESET}"
+    echo -e "${YELLOW}🤔 Checking required tools...${RESET}"
 
     local missing_tools=0
     local security_warnings=0
 
-    # Check OS
     if [[ "$OSTYPE" != "darwin"* ]]; then
-        echo "[MISSING] This script requires MacOS. Current OS: $OSTYPE"
+        echo -e "${RED}❌ [FATAL] This script requires MacOS (). Current OS: $OSTYPE${RESET}"
         exit 1
     else
-        echo "[OK] Running on MacOS"
+        echo -e "${GREEN}✅ 💻 Running on MacOS${RESET}"
     fi
 
-    echo -e "\nCHECKING DEVELOPMENT TOOLS:"
-    # Check Homebrew
-    check_brew || ((missing_tools++))
+    echo -e "\n${BLUE}🔧 CHECKING TOOLS & APPLICATIONS FOR PROFILE: ${YELLOW}$SELECTED_PROFILE${RESET}"
 
-    # Check command line tools
-    check_command "k9s" "k9s" || ((missing_tools++))
-    check_command "jq" "jq" || ((missing_tools++))
-    check_command "gcloud" "Google Cloud SDK" || ((missing_tools++))
-    check_command "gh" "GitHub CLI" || ((missing_tools++))
+    for app_def in "${APPS_DEFINITIONS[@]}"; do
+        IFS=';' read -r id display_name type profiles brew_name app_path_name cmd_name <<< "$app_def"
 
-    echo -e "\nCHECKING APPLICATIONS:"
-    # Check applications with both brew and direct installation
-    check_app_installation "docker" "Docker" "Docker" || ((missing_tools++))
-    check_app_installation "slack" "Slack" "Slack" || ((missing_tools++))
-    check_app_installation "twingate" "Twingate" "Twingate" || ((missing_tools++))
-    check_app_installation "cursor" "Cursor" "Cursor" || ((missing_tools++))
-    check_app_installation "dbeaver-community" "DBeaver" "DBeaver Community" || ((missing_tools++))
-    check_app_installation "visual-studio-code" "Visual Studio Code" "Visual Studio Code" || ((missing_tools++))
+        if ! is_app_for_profile "$profiles"; then
+            continue
+        fi
 
-    echo -e "\nCHECKING SECURITY TOOLS:"
-    # Check security applications
-    check_sentinelone || ((missing_tools++))
-    check_automox || ((missing_tools++))
-    check_app_installation "nordpass" "NordPass" "NordPass" || ((missing_tools++))
+        #echo -e "🤔 Checking $display_name... " # Start the line
 
-    # Check for TeamViewer (should not be installed)
+        local check_status=1 # Default to fail (1)
+
+        case "$type" in
+            core_tool)
+                if [[ "$id" == "homebrew" ]]; then
+                    if check_brew; then check_status=0; else ((missing_tools++)); fi
+                fi
+                ;;
+            cli)
+                if check_command "$cmd_name" "$display_name"; then check_status=0; else ((missing_tools++)); fi
+                ;;
+            cask)
+                if check_app_installation "$brew_name" "$app_path_name" "$display_name"; then check_status=0; else ((missing_tools++)); fi
+                ;;
+            gcloud_sdk_base)
+                if check_command "$cmd_name" "$display_name"; then check_status=0; else ((missing_tools++)); fi
+                ;;
+            gcloud_util)
+                # This one has custom echo, so we handle it differently to append emoji
+                if [ ! -f "$app_path_name" ]; then
+                    echo -e "${RED}❌ $display_name is not installed at $app_path_name${RESET} ❌"
+                    ((missing_tools++))
+                    check_status=1 # Explicitly failed
+                else
+                    echo -e "${GREEN}✅ $display_name is installed${RESET}"
+                    check_status=0 # Explicitly passed
+                fi
+                continue # Already printed emoji, skip common emoji echo
+                ;;
+            security_verify_path)
+                if check_application "$app_path_name" "$display_name"; then check_status=0; else ((missing_tools++)); fi
+                ;;
+            security_verify_ps)
+                # This one also has custom echo
+                if ps -ef | grep -v grep | grep -q "$cmd_name"; then
+                    echo -e "${GREEN}✅ $display_name is installed and running${RESET}"
+                    check_status=0 # Explicitly passed
+                else
+                    echo -e "${RED}❌ $display_name is not installed or not running${RESET}"
+                    ((missing_tools++))
+                    check_status=1 # Explicitly failed
+                fi
+                continue # Already printed emoji, skip common emoji echo
+                ;;
+            *)
+                echo -e "${YELLOW}⚠️ Warning: Unknown app type '$type' for $display_name${RESET}"
+                check_status=1 # Consider unknown as a failed check for this item
+                ;;
+        esac
+
+    done
+
+    echo -e "\n${BLUE}🛡️  CHECKING GENERAL SECURITY:${RESET}"
     if [ -d "/Applications/TeamViewer.app" ] || [ -d "$HOME/Applications/TeamViewer.app" ]; then
-        echo "${RED}WARNING: TeamViewer is installed and should be removed for security reasons${RESET}"
+        echo -e "${RED}⚠️ WARNING: TeamViewer is installed and should be removed for security reasons${RESET}"
         ((security_warnings++))
-    fi
-
-    # Check gkc.sh
-    echo -e "\nCHECKING UTILITIES:"
-    if [ ! -f ${HOME}/Applications/google-cloud-sdk/bin/gkc.sh ]; then
-        echo "[MISSING] gkc.sh is not installed"
-        ((missing_tools++))
     else
-        echo "[OK] gkc.sh is installed"
+        echo -e "${GREEN}✅ TeamViewer is not installed.${RESET}"
     fi
 
-    echo -e "\nSUMMARY:"
+    echo -e "\n${BLUE}📊 SUMMARY:${RESET}"
     if [ $missing_tools -eq 0 ] && [ $security_warnings -eq 0 ]; then
-        echo "[OK] All tools are installed and no security warnings!"
+        echo -e "${GREEN}🎉 All required tools for profile '$SELECTED_PROFILE' are installed and no security warnings!${RESET}"
         return 0
     else
         if [ $missing_tools -gt 0 ]; then
-            echo "[MISSING] Found $missing_tools missing tool(s)"
-            echo "Run with --install to install missing tools"
+            echo -e "${RED}❌ Found $missing_tools missing tool(s) for profile '$SELECTED_PROFILE'${RESET}"
+            echo -e "${YELLOW}Run with --install --profile $SELECTED_PROFILE to install missing tools${RESET}"
         fi
         if [ $security_warnings -gt 0 ]; then
-            echo "${RED}WARNING: Found $security_warnings security warning(s)${RESET}"
-            echo "Please address security warnings before proceeding"
+            echo -e "${RED}⚠️ Found $security_warnings general security warning(s)${RESET}"
+            echo -e "${YELLOW}Please address security warnings manually.${RESET}"
         fi
         return 1
     fi
@@ -204,261 +284,255 @@ do_certification() {
 
 # Function to perform installation
 do_installation() {
-    echo "Starting MacOS laptop setup..."
+    echo -e "${BLUE}🚀 Performing installation for profile: ${YELLOW}$SELECTED_PROFILE${RESET}"
 
-    # Check directory permissions first
+    # Check directory permissions first (important pre-flight check)
     local permission_issues=false
-    if [ ! -w "/usr/local/share/zsh" ] || [ ! -w "/usr/local/share/zsh/site-functions" ]; then
-        echo "WARNING: The following directories are not writable by your user:"
-        [ ! -w "/usr/local/share/zsh" ] && echo "/usr/local/share/zsh"
-        [ ! -w "/usr/local/share/zsh/site-functions" ] && echo "/usr/local/share/zsh/site-functions"
+    # Expand ~ to HOME for portability, though /usr/local/ is absolute
+    local zsh_share_path="/usr/local/share/zsh"
+    local zsh_site_functions_path="/usr/local/share/zsh/site-functions"
+
+    if [ ! -w "$zsh_share_path" ] || [ ! -w "$zsh_site_functions_path" ]; then
+        echo -e "${YELLOW}⚠️ WARNING: The following directories might not be writable by your user:${RESET}"
+        [ ! -d "$zsh_share_path" ] && echo -e "         (Directory $zsh_share_path does not exist or no write perm)"
+        [ ! -w "$zsh_share_path" ] && [ -d "$zsh_share_path" ] && echo -e "         $zsh_share_path"
+        [ ! -d "$zsh_site_functions_path" ] && echo -e "         (Directory $zsh_site_functions_path does not exist or no write perm)"
+        [ ! -w "$zsh_site_functions_path" ] && [ -d "$zsh_site_functions_path" ] && echo -e "         $zsh_site_functions_path"
         echo ""
-        echo "Please run the following command to fix permissions and then run this script again:"
-        echo "  sudo chown -R $(whoami) /usr/local/share/zsh /usr/local/share/zsh/site-functions"
-        echo "  chmod u+w /usr/local/share/zsh /usr/local/share/zsh/site-functions"
-        permission_issues=true
+        echo -e "${YELLOW}Please ensure your user can write to /usr/local/share/zsh and its subdirectories."
+        echo -e "Often, Homebrew setup handles this. If issues persist, you might need:
+  ${GREEN}sudo chown -R $(whoami) /usr/local/share/zsh /usr/local/share/zsh/site-functions
+  chmod u+w /usr/local/share/zsh /usr/local/share/zsh/site-functions${RESET}"
+        echo -e "${YELLOW}Attempting to proceed, but some installations (like gcloud SDK shell completion) might fail.${RESET}"
+        # permission_issues=true # Decide if this should be fatal
     fi
 
-    # Check if running as root or via sudo
     if [ "$(id -u)" = "0" ]; then
-        echo "[ERROR] This script should not be run as root or with sudo"
-        echo "Please run it as a regular user. If you need to fix permissions, see instructions above."
+        echo -e "${RED}❌ ERROR: This script should not be run as root or with sudo directly.${RESET}"
+        echo "Individual commands requiring sudo (like Automox install) will prompt if necessary."
         exit 1
     fi
 
-    # If there are permission issues, exit with instructions
-    if [ "$permission_issues" = true ]; then
-        exit 1
-    fi
+    # if [ "$permission_issues" = true ]; then
+    #     exit 1
+    # fi
 
-    # Install Homebrew if not present
-    if ! command -v brew &> /dev/null; then
-        echo "Installing Homebrew..."
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    fi
+    echo -e "\n${BLUE}🔧 INSTALLING TOOLS & APPLICATIONS FOR PROFILE: ${YELLOW}$SELECTED_PROFILE${RESET}"
 
-    # Install command line tools
-    if ! command -v k9s &> /dev/null; then
-        echo "Installing k9s..."
-        brew install k9s
-    fi
+    for app_def in "${APPS_DEFINITIONS[@]}"; do
+        IFS=';' read -r id display_name type profiles brew_name app_path_name cmd_name <<< "$app_def"
 
-    if ! command -v jq &> /dev/null; then
-        echo "Installing jq..."
-        brew install jq
-    fi
-
-    if ! command -v gh &> /dev/null; then
-        echo "Installing GitHub CLI..."
-        brew install gh
-        echo "Please run 'gh auth login' to authenticate with GitHub"
-    fi
-
-    # Install Docker if not present
-    if ! check_app_installation "docker" "Docker" "Docker" &>/dev/null; then
-        echo "Installing Docker..."
-        brew install --cask docker
-        echo "Please open Docker Desktop to complete the installation"
-    fi
-
-    # Install Slack if not present
-    if ! check_app_installation "slack" "Slack" "Slack" &>/dev/null; then
-        echo "Installing Slack..."
-        brew install --cask slack
-    fi
-
-    # Install Twingate if not present
-    if ! check_app_installation "twingate" "Twingate" "Twingate" &>/dev/null; then
-        echo "Installing Twingate..."
-        brew install --cask twingate
-    fi
-
-    # Install NordPass if not present
-    if ! check_app_installation "nordpass" "NordPass" "NordPass" &>/dev/null; then
-        echo "Installing NordPass..."
-        brew install --cask nordpass
-    fi
-    
-    # Install Cursor if not present
-    if ! check_app_installation "cursor" "Cursor" "Cursor" &>/dev/null; then
-        echo "Installing Cursor..."
-        brew install --cask cursor
-    fi
-    
-    # Install DBeaver Community if not present
-    if ! check_app_installation "dbeaver-community" "DBeaver" "DBeaver Community" &>/dev/null; then
-        echo "Installing DBeaver Community..."
-        brew install --cask dbeaver-community
-    fi
-
-    # Install Visual Studio Code if not present
-    if ! check_app_installation "visual-studio-code" "Visual Studio Code" "Visual Studio Code" &>/dev/null; then
-        echo "Installing Visual Studio Code..."
-        brew install --cask visual-studio-code
-    fi
-
-    # Install Google Cloud SDK
-    if ! command -v gcloud &> /dev/null; then
-        echo "Installing Google Cloud SDK..."
-
-        # Create Applications directory if it doesn't exist
-        mkdir -p "${HOME}/Applications"
-        cd "${HOME}/Applications"
-
-        # Use the official installer script (most reliable method)
-        echo "Downloading and installing Google Cloud SDK using official installer..."
-        bash -c "$(curl -fsSL https://sdk.cloud.google.com)" _ --disable-prompts --install-dir="${HOME}/Applications"
-        
-        # Check if installation was successful
-        if [ -d "${HOME}/Applications/google-cloud-sdk" ]; then
-            echo "Google Cloud SDK installation successful"
-            
-            # Configure shell
-            echo "Configuring shell for Google Cloud SDK..."
-            echo "source '${HOME}/Applications/google-cloud-sdk/path.bash.inc'" >> "${HOME}/.bash_profile"
-            echo "source '${HOME}/Applications/google-cloud-sdk/completion.bash.inc'" >> "${HOME}/.bash_profile"
-            
-            if [ -f "${HOME}/.zshrc" ]; then
-                echo "source '${HOME}/Applications/google-cloud-sdk/path.zsh.inc'" >> "${HOME}/.zshrc"
-                echo "source '${HOME}/Applications/google-cloud-sdk/completion.zsh.inc'" >> "${HOME}/.zshrc"
-            fi
-            
-            # Initialize gcloud
-            echo "Initializing Google Cloud SDK..."
-            "${HOME}/Applications/google-cloud-sdk/bin/gcloud" init
-        else
-            echo "ERROR: Google Cloud SDK installation failed. Please try again or install manually."
-            echo "Manual installation instructions: https://cloud.google.com/sdk/docs/install"
+        if ! is_app_for_profile "$profiles"; then
+            continue # Skip this app if not for the current profile
         fi
-    fi
 
-    cd "${HOME}/Applications"
-    # Install kubectl and GKE auth plugin components
-    echo "Installing kubectl via gcloud components..."
-    ./google-cloud-sdk/bin/gcloud components install kubectl --quiet
+        echo -e "\n➡️  Processing ${GREEN}$display_name${RESET}..."
 
-    echo "Installing gke-gcloud-auth-plugin for kubectl authentication with GKE..."
-    ./google-cloud-sdk/bin/gcloud components install gke-gcloud-auth-plugin --quiet
+        case "$type" in
+            core_tool)
+                if [[ "$id" == "homebrew" ]]; then
+                    if ! check_brew &>/dev/null; then # Check silently
+                        echo "    Installing Homebrew..."
+                        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+                        if ! check_brew; then echo -e "    ${RED}❌ Homebrew installation failed.${RESET}"; else echo -e "    ${GREEN}✅ Homebrew installed.${RESET}"; fi
+                    else
+                        echo -e "    ${GREEN}✅ Homebrew already installed.${RESET}"
+                    fi
+                fi
+                ;;
+            cli)
+                if ! check_command "$cmd_name" "$display_name" &>/dev/null; then # Check silently
+                    echo "    Installing $display_name ($cmd_name)..."
+                    brew install "$brew_name"
+                    if ! check_command "$cmd_name" "$display_name"; then echo -e "    ${RED}❌ $display_name installation failed.${RESET}"; else echo -e "    ${GREEN}✅ $display_name installed.${RESET}"; fi
+                    if [[ "$id" == "gh" ]]; then echo -e "    ${YELLOW}🔔 Please run 'gh auth login' to authenticate with GitHub.${RESET}"; fi
+                else
+                    echo -e "    ${GREEN}✅ $display_name already installed.${RESET}"
+                fi
+                ;;
+            cask)
+                if ! check_app_installation "$brew_name" "$app_path_name" "$display_name" &>/dev/null; then # Check silently
+                    echo "    Installing $display_name..."
+                    brew install --cask "$brew_name"
+                    if ! check_app_installation "$brew_name" "$app_path_name" "$display_name"; then echo -e "    ${RED}❌ $display_name installation failed.${RESET}"; else echo -e "    ${GREEN}✅ $display_name installed.${RESET}"; fi
+                    if [[ "$id" == "docker" ]]; then echo -e "    ${YELLOW}🔔 Please open Docker Desktop to complete its setup if needed.${RESET}"; fi
+                else
+                    echo -e "    ${GREEN}✅ $display_name already installed.${RESET}"
+                fi
+                ;;
+            gcloud_sdk_base)
+                if ! check_command "$cmd_name" "$display_name" &>/dev/null; then # Check silently
+                    echo "    Installing Google Cloud SDK (base)..."
+                    mkdir -p "${HOME}/Applications" # Ensure target directory exists
+                    (cd "${HOME}/Applications" && curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir="${HOME}/Applications")
 
-    # Verify installations
-    if command -v "${HOME}/Applications/google-cloud-sdk/bin/kubectl" &> /dev/null; then
-        echo "[OK] kubectl installed successfully"
+                    if [ -d "${HOME}/Applications/google-cloud-sdk" ]; then
+                        echo -e "    ${GREEN}✅ Google Cloud SDK downloaded to ~/Applications/google-cloud-sdk.${RESET}"
+                        echo "    Configuring shell for Google Cloud SDK..."
+                        echo "source '${HOME}/Applications/google-cloud-sdk/path.bash.inc'" >> "${HOME}/.bash_profile"
+                        echo "source '${HOME}/Applications/google-cloud-sdk/completion.bash.inc'" >> "${HOME}/.bash_profile"
+                        if [ -f "${HOME}/.zshrc" ]; then
+                            echo "source '${HOME}/Applications/google-cloud-sdk/path.zsh.inc'" >> "${HOME}/.zshrc"
+                            echo "source '${HOME}/Applications/google-cloud-sdk/completion.zsh.inc'" >> "${HOME}/.zshrc"
+                        fi
+                        echo -e "    ${YELLOW}🔔 Initializing Google Cloud SDK... Please follow the prompts.${RESET}"
+                        "${HOME}/Applications/google-cloud-sdk/bin/gcloud" init
+                        echo "    Installing kubectl component..."
+                        "${HOME}/Applications/google-cloud-sdk/bin/gcloud" components install kubectl --quiet
+                        echo "    Installing gke-gcloud-auth-plugin component..."
+                        "${HOME}/Applications/google-cloud-sdk/bin/gcloud" components install gke-gcloud-auth-plugin --quiet
+                        if [ -L /usr/local/bin/kubectl ] || [ ! -e /usr/local/bin/kubectl ]; then
+                           sudo ln -sf "${HOME}/Applications/google-cloud-sdk/bin/kubectl" /usr/local/bin/kubectl
+                           echo "    Created symlink for kubectl."
+                        fi
+                    else
+                        echo -e "    ${RED}❌ Google Cloud SDK installation failed. See official docs.${RESET}"
+                    fi
+                else
+                    echo -e "    ${GREEN}✅ Google Cloud SDK already installed.${RESET}"
+                     # Ensure components are there if gcloud is already installed
+                    echo "    Verifying/installing gcloud components: kubectl, gke-gcloud-auth-plugin..."
+                    "${HOME}/Applications/google-cloud-sdk/bin/gcloud" components install kubectl --quiet
+                    "${HOME}/Applications/google-cloud-sdk/bin/gcloud" components install gke-gcloud-auth-plugin --quiet
+                    if [ -L /usr/local/bin/kubectl ] || [ ! -e /usr/local/bin/kubectl ]; then
+                        sudo ln -sf "${HOME}/Applications/google-cloud-sdk/bin/kubectl" /usr/local/bin/kubectl
+                        echo "    Ensured symlink for kubectl."
+                    fi
+                fi
+                ;;
+            gcloud_util)
+                # gkc.sh installation, depends on gcloud being installed first
+                if [ -f "${HOME}/Applications/google-cloud-sdk/bin/gsutil" ]; then
+                    if [ ! -f "$app_path_name" ]; then # $app_path_name is the full path like ~/Applications/google-cloud-sdk/bin/gkc.sh
+                        echo "    Installing $display_name..."
+                        "${HOME}/Applications/google-cloud-sdk/bin/gsutil" cp "gs://adh-tools/gkc.sh" "${app_path_name%/*}/" # Copy to its directory
+                        chmod u+x "$app_path_name"
+                        if [ -L /usr/local/bin/gkc.sh ] || [ ! -e /usr/local/bin/gkc.sh ]; then
+                            sudo ln -sf "$app_path_name" /usr/local/bin/gkc.sh
+                        fi
+                        if [ -f "$app_path_name" ]; then echo -e "    ${GREEN}✅ $display_name installed.${RESET}"; else echo -e "    ${RED}❌ $display_name installation failed.${RESET}"; fi
+                    else
+                        echo -e "    ${GREEN}✅ $display_name already installed.${RESET}"
+                    fi
+                else
+                    echo -e "    ${YELLOW}⚠️ Cannot install $display_name because Google Cloud SDK (gsutil) is not found in the expected location.${RESET}"
+                fi
+                ;;
+            security_verify_ps) # Handles Automox installation
+                if [[ "$id" == "automox" ]]; then
+                    if ! check_automox &>/dev/null; then # Check silently if it's running
+                        if [ -n "$AUTOMOX_ACCESS_KEY" ]; then
+                            echo "    Installing Automox... (This will require sudo password)"
+                            curl -sS "https://console.automox.com/downloadInstaller?accesskey=${AUTOMOX_ACCESS_KEY}" | sudo bash
+                            # Re-check after install attempt
+                            if check_automox; then echo -e "    ${GREEN}✅ Automox installed and appears to be running.${RESET}"; else echo -e "    ${RED}❌ Automox installation attempted, but it does not appear to be running. Check logs.${RESET}"; fi
+                        else
+                            echo -e "    ${YELLOW}⚠️ Automox access key not provided. Skipping installation. Use --automox-key <key>.${RESET}"
+                        fi
+                    else
+                        echo -e "    ${GREEN}✅ Automox already installed and running.${RESET}"
+                    fi
+                fi
+                ;;
+            security_verify_path)
+                # For SentinelOne, it's verification only. No install step here.
+                echo -e "    ${YELLOW}ℹ️ $display_name is for verification only. Please install via IT if missing.${RESET}"
+                if ! check_application "$app_path_name" "$display_name"; then : ; fi # Just run check for its output
+                ;;
+            *)
+                echo -e "    ${YELLOW}⚠️ Warning: Unknown app type '$type' for $display_name. No installation rule defined.${RESET}"
+                ;;
+        esac
+    done
+
+    # General security warnings post-installation attempts
+    echo -e "\n${BLUE}🛡️  POST-INSTALL SECURITY CHECK:${RESET}"
+    if [ -d "/Applications/TeamViewer.app" ] || [ -d "$HOME/Applications/TeamViewer.app" ]; then
+        echo -e "${RED}⚠️ WARNING: TeamViewer is installed and should be removed for security reasons.${RESET}"
     else
-        echo "[WARNING] kubectl installation may have failed"
+        echo -e "${GREEN}✅ TeamViewer is not installed.${RESET}"
     fi
 
-    if [ -f "${HOME}/Applications/google-cloud-sdk/bin/gke-gcloud-auth-plugin" ]; then
-        echo "[OK] gke-gcloud-auth-plugin installed successfully"
-    else
-        echo "[WARNING] gke-gcloud-auth-plugin installation may have failed"
-    fi
-
-    # Create kubectl symlink in /usr/local/bin for convenience
-    sudo ln -sf "${HOME}/Applications/google-cloud-sdk/bin/kubectl" /usr/local/bin/kubectl
-
-    # Install gkc.sh
-    if [ ! -f "${HOME}/Applications/google-cloud-sdk/bin/gkc.sh" ]; then
-        echo "Installing gkc.sh..."
-        "${HOME}/Applications/google-cloud-sdk/bin/gsutil" cp gs://adh-tools/gkc.sh "${HOME}/Applications/google-cloud-sdk/bin/"
-        chmod u+x "${HOME}/Applications/google-cloud-sdk/bin/gkc.sh"
-        sudo ln -sf "${HOME}/Applications/google-cloud-sdk/bin/gkc.sh" /usr/local/bin/gkc.sh
-    fi
-
-    # Check for TeamViewer and warn if present
-    if [ -d "/Applications/TeamViewer.app" ] || [ -d "${HOME}/Applications/TeamViewer.app" ]; then
-        echo -e "\nWARNING: TeamViewer is installed and should be removed for security reasons"
-        echo "Please uninstall TeamViewer manually using the following steps:"
-        echo "1. Quit TeamViewer if it's running"
-        echo "2. Open Finder"
-        echo "3. Go to Applications"
-        echo "4. Drag TeamViewer to the Trash"
-        echo "5. Empty the Trash"
-    fi
-
-    echo -e "\n[OK] MacOS setup complete!"
-    echo "Please restart your terminal to ensure all changes take effect"
-    echo "You can now connect using: gkc.sh adh-development develop"
-
-    # Additional manual steps needed
-    echo -e "\nNOTE: Manual steps needed:"
-    echo "1. Run 'gh auth login' to authenticate with GitHub if you installed GitHub CLI"
-    
-    # Verify security tools
-    if ! check_sentinelone &>/dev/null; then
-        echo "2. Install SentinelOne from your IT department"
-    fi
-    
-    if ! check_automox &>/dev/null; then
-        echo "3. Install Automox from your IT department"
-    fi
-    
-    if ! check_app_installation "nordpass" "NordPass" "NordPass" &>/dev/null; then
-        echo "4. Install NordPass from your IT department or run 'brew install --cask nordpass'"
-    fi
-
-    # Check for TeamViewer and warn if present
-    if [ -d "/Applications/TeamViewer.app" ] || [ -d "${HOME}/Applications/TeamViewer.app" ]; then
-        echo -e "\n${RED}WARNING: TeamViewer is installed and should be removed for security reasons"
-        echo "Please uninstall TeamViewer manually using the following steps:"
-        echo "1. Quit TeamViewer if it's running"
-        echo "2. Open Finder"
-        echo "3. Go to Applications"
-        echo "4. Drag TeamViewer to the Trash"
-        echo "5. Empty the Trash${RESET}"
-    fi
-
+    echo -e "\n${GREEN}🎉 Installation phase for profile '$SELECTED_PROFILE' complete!${RESET}"
+    echo -e "${YELLOW}🔔 Please restart your terminal for all changes (especially PATH updates for gcloud) to take effect.${RESET}"
+    echo -e "${YELLOW}Some applications (like Docker) might require manual first-time launch to complete setup.${RESET}"
+    echo -e "${YELLOW}If GitHub CLI was installed, run 'gh auth login'.${RESET}"
 }
 
-# Add color codes using tput
-RED=$(tput setaf 1)
-RESET=$(tput sgr0)
+# --- Main Script Logic (Argument Parsing and Execution) ---
 
-# Check if no arguments were provided
+# Initial check for no arguments - if so, show usage and exit.
 if [ $# -eq 0 ]; then
     usage
     exit 0
 fi
 
 # Parse command line options
-while getopts "hci-:" opt; do
-    case "${opt}" in
-        h)
+CERT_FLAG=false
+INSTALL_FLAG=false
+
+POSITIONAL_ARGS=()
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
             usage
             ;;
-        c)
-            do_certification
+        -c|--certification)
+            CERT_FLAG=true
+            shift
             ;;
-        i)
-            do_installation
+        -i|--install)
+            INSTALL_FLAG=true
+            shift
             ;;
-        -)
-            case "${OPTARG}" in
-                help)
-                    usage
-                    ;;
-                certification)
-                    do_certification
-                    ;;
-                install)
-                    do_installation
-                    ;;
-                *)
-                    echo "Invalid option: --${OPTARG}" >&2
-                    usage
-                    ;;
-            esac
+        --profile)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                SELECTED_PROFILE="$2"
+                shift 2
+            else
+                echo -e "${RED}❌ Error: --profile option requires an argument (engineering or other).${RESET}" >&2
+                usage
+            fi
             ;;
-        ?)
+        --automox-key)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                AUTOMOX_ACCESS_KEY="$2"
+                shift 2
+            else
+                echo -e "${RED}❌ Error: --automox-key option requires an argument.${RESET}" >&2
+                usage
+            fi
+            ;;
+        -*)
+            echo -e "${RED}❌ Error: Unknown option: $1${RESET}" >&2
+            usage
+            ;;
+        *)
+            echo -e "${RED}❌ Error: Unknown argument(s): $1${RESET}" >&2
             usage
             ;;
     esac
 done
 
-# Remove processed options
-shift $((OPTIND-1))
-
-# If there are remaining arguments, show usage
-if [ $# -gt 0 ]; then
-    echo "Error: Unknown argument(s): $@"
+# Validate SELECTED_PROFILE
+echo -e "${BLUE}ℹ️ Selected profile: ${YELLOW}$SELECTED_PROFILE${RESET}"
+if [[ "$SELECTED_PROFILE" != "engineering" && "$SELECTED_PROFILE" != "other" ]]; then
+    echo -e "${RED}❌ Error: Invalid profile '$SELECTED_PROFILE'. Choose 'engineering' or 'other'.${RESET}" >&2
     usage
+fi
+
+# Main execution logic based on parsed flags
+if ! $CERT_FLAG && ! $INSTALL_FLAG; then
+    echo -e "${RED}❌ No action specified (e.g., --certification or --install).${RESET}" >&2
+    usage
+fi
+
+if $CERT_FLAG; then
+    # The initial announcement is now part of do_certification itself
+    do_certification
+fi
+
+if $INSTALL_FLAG; then
+    echo -e "\n${GREEN}🚀 Performing installation for profile: ${YELLOW}$SELECTED_PROFILE...${RESET}" # Added emoji here
+    do_installation
 fi
