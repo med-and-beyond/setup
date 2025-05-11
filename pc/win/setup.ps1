@@ -104,20 +104,20 @@ function Test-IsAppForProfile($AppProfiles) {
 }
 
 function Invoke-Certification {
-    Write-HostColorized "🚀 Performing certification for profile: $($Profile.ToUpper())" $ColorBlue
-    Write-HostColorized "🤔 Checking required tools..." $ColorYellow
+    Write-HostColorized "Performing certification for profile: $($Profile.ToUpper())" $ColorBlue
+    Write-HostColorized "Checking required tools..." $ColorYellow
 
     $missingTools = 0
     $securityWarnings = 0
 
-    Write-HostColorized ("🔧 CHECKING TOOLS " + "&" + " APPLICATIONS FOR PROFILE: $($Profile.ToUpper())") $ColorBlue
+    Write-HostColorized ("🔧 CHECKING TOOLS " + " APPLICATIONS FOR PROFILE: $($Profile.ToUpper())") $ColorBlue
 
     foreach ($appDef in $AppsDefinitions) {
         if (-not (Test-IsAppForProfile $appDef.Profiles)) {
             continue
         }
 
-        Write-Host -NoNewline "🤔 Checking $($appDef.DisplayName)... "
+        Write-Host -NoNewline "Checking $($appDef.DisplayName)... "
         $installed = $false
         
         if ($appDef.VerificationCommand) {
@@ -136,22 +136,22 @@ function Invoke-Certification {
         }
 
         if ($installed) {
-            Write-HostColorized "✅" $ColorGreen
+            Write-HostColorized "[OK]" $ColorGreen
         } else {
-            Write-HostColorized "❌" $ColorRed
+            Write-HostColorized "[MISSING]" $ColorRed
             $missingTools++
         }
     }
     
-    Write-HostColorized "`n🛡️  CHECKING GENERAL SECURITY: (Placeholder)" $ColorBlue
+    Write-HostColorized "CHECKING GENERAL SECURITY: (Placeholder)" $ColorBlue
 
-    Write-HostColorized "`n📊 SUMMARY:" $ColorBlue
+    Write-HostColorized "SUMMARY:" $ColorBlue
     if ($missingTools -eq 0 -and $securityWarnings -eq 0) {
-        Write-HostColorized "🎉 All required tools for profile '$($Profile.ToUpper())' are installed and no security warnings!" $ColorGreen
+        Write-HostColorized "All required tools for profile '$($Profile.ToUpper())' are installed and no security warnings!" $ColorGreen
         return $true
     } else {
         if ($missingTools -gt 0) {
-            Write-HostColorized "❌ Found $missingTools missing tool(s) for profile '$($Profile.ToUpper())'" $ColorRed
+            Write-HostColorized "[MISSING] Found $missingTools missing tool(s) for profile '$($Profile.ToUpper())" $ColorRed
             Write-HostColorized "Run with -Install -Profile $Profile to install missing tools" $ColorYellow
         }
         return $false
@@ -159,16 +159,16 @@ function Invoke-Certification {
 }
 
 function Invoke-Installation {
-    Write-HostColorized "🚀 Performing installation for profile: $($Profile.ToUpper())" $ColorBlue
+    Write-HostColorized "Performing installation for profile: $($Profile.ToUpper())" $ColorBlue
 
-    Write-HostColorized ("🔧 INSTALLING TOOLS " + "&" + " APPLICATIONS FOR PROFILE: $($Profile.ToUpper())") $ColorBlue
+    Write-HostColorized ("INSTALLING TOOLS " + " APPLICATIONS FOR PROFILE: $($Profile.ToUpper())") $ColorBlue
 
     foreach ($appDef in $AppsDefinitions) {
         if (-not (Test-IsAppForProfile $appDef.Profiles)) {
             continue
         }
 
-        Write-HostColorized "`n➡️  Processing $($appDef.DisplayName)..." $ColorGreen
+        Write-HostColorized "Processing $($appDef.DisplayName)..." $ColorGreen
         
         if ($appDef.ID -eq "automox" -and -not [string]::IsNullOrWhiteSpace($AutomoxKey)) {
             Write-HostColorized "   Attempting Automox installation (Windows method TBD)... Access Key: $AutomoxKey" $ColorYellow
@@ -179,8 +179,8 @@ function Invoke-Installation {
         }
     }
     
-    Write-HostColorized "`n🎉 Installation phase for profile '$($Profile.ToUpper())' complete (placeholders)!" $ColorGreen
-    Write-HostColorized "🔔 Please restart your terminal or system if prompted by any installers." $ColorYellow
+    Write-HostColorized "Installation phase for profile '$($Profile.ToUpper())' complete (placeholders)!" $ColorGreen
+    Write-HostColorized "Please restart your terminal or system if prompted by any installers." $ColorYellow
 }
 
 # --- Main Script Logic ---
@@ -192,7 +192,7 @@ if ($Help) {
 Write-HostColorized "ℹ️ Selected profile: $($Profile.ToUpper())" $ColorBlue
 
 if (-not $Certification -and -not $Install) {
-    Write-HostColorized "❌ No action specified (e.g., -Certification or -Install)." $ColorRed
+    Write-HostColorized "[ERROR] No action specified (e.g., -Certification or -Install)." $ColorRed
     Show-Usage
 }
 
