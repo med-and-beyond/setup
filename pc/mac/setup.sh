@@ -347,63 +347,91 @@ do_installation() {
                 fi
                 ;;
             gcloud_sdk_base)
-                GCLOUD_SDK_PATH="${HOME}/Applications/google-cloud-sdk"
-                GCLOUD_BIN="${GCLOUD_SDK_PATH}/bin/gcloud"
+                GCLOUD_INSTALL_DIR="${HOME}/Applications/google-cloud-sdk"
+                GCLOUD_INSTALLED_HERE_FLAG="${GCLOUD_INSTALL_DIR}/.installed_by_this_script"
 
-                if ! check_command "gcloud" "Google Cloud SDK" &>/dev/null; then # Check silently
-                    echo "    Installing Google Cloud SDK (base)..."
+                if ! command -v gcloud &> /dev/null; then
+                    echo "    🤔 Google Cloud SDK (gcloud command) not found in PATH. Attempting installation..."
                     mkdir -p "${HOME}/Applications" # Ensure target directory exists
+                    echo "    ☁️ Downloading and installing Google Cloud SDK to $GCLOUD_INSTALL_DIR..."
                     # Use --quiet for the SDK installer itself
-                    (cd "${HOME}/Applications" && curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --quiet --install-dir="${HOME}/Applications")
+                    if (cd "${HOME}/Applications" && curl -fsSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --quiet --install-dir="${GCLOUD_INSTALL_DIR}"); then
+                        echo -e "    ${GREEN}✅ Google Cloud SDK downloaded successfully.${RESET}"
+                        touch "$GCLOUD_INSTALLED_HERE_FLAG" # Mark that we installed it
 
-                    if [ -d "$GCLOUD_SDK_PATH" ]; then
-                        echo -e "    ${GREEN}✅ Google Cloud SDK downloaded to $GCLOUD_SDK_PATH.${RESET}"
-                        echo "    Configuring shell for Google Cloud SDK..."
-                        echo "source '${GCLOUD_SDK_PATH}/path.bash.inc'" >> "${HOME}/.bash_profile"
-                        echo "source '${GCLOUD_SDK_PATH}/completion.bash.inc'" >> "${HOME}/.bash_profile"
+                        echo "    🛠️  Configuring shell for Google Cloud SDK (requires terminal restart or sourcing profile)..."
+                        echo "source '${GCLOUD_INSTALL_DIR}/path.bash.inc'" >> "${HOME}/.bash_profile"
+                        echo "source '${GCLOUD_INSTALL_DIR}/completion.bash.inc'" >> "${HOME}/.bash_profile"
                         if [ -f "${HOME}/.zshrc" ]; then
-                            echo "source '${GCLOUD_SDK_PATH}/path.zsh.inc'" >> "${HOME}/.zshrc"
-                            echo "source '${GCLOUD_SDK_PATH}/completion.zsh.inc'" >> "${HOME}/.zshrc"
+                            echo "source '${GCLOUD_INSTALL_DIR}/path.zsh.inc'" >> "${HOME}/.zshrc"
+                            echo "source '${GCLOUD_INSTALL_DIR}/completion.zsh.inc'" >> "${HOME}/.zshrc"
                         fi
-                        echo -e "    ${YELLOW}🔔 Initializing Google Cloud SDK... Please follow the prompts (or use --quiet for gcloud init if fully non-interactive is desired).${RESET}"
-                        "$GCLOUD_BIN" init # gcloud init is interactive by design, cannot be fully silenced easily unless pre-configured.
                         
-                        echo "    Installing gcloud components (kubectl, gke-gcloud-auth-plugin) silently..."
-                        "$GCLOUD_BIN" components install kubectl --quiet
-                        "$GCLOUD_BIN" components install gke-gcloud-auth-plugin --quiet
+                        # Use the newly installed gcloud for init and components
+                        GCLOUD_BIN_TO_USE="${GCLOUD_INSTALL_DIR}/bin/gcloud"
+                        echo -e "    ${YELLOW}🔔 Initializing Google Cloud SDK (using $GCLOUD_BIN_TO_USE)... Please follow the prompts.${RESET}"
+                        "$GCLOUD_BIN_TO_USE" init 
                         
-                        if [ -L /usr/local/bin/kubectl ] || [ ! -e /usr/local/bin/kubectl ]; then
-                           sudo ln -sf "${GCLOUD_SDK_PATH}/bin/kubectl" /usr/local/bin/kubectl
-                           echo "    Created symlink for kubectl."
+                        echo "    🛠️  Installing gcloud components (kubectl, gke-gcloud-auth-plugin) silently..."
+                        "$GCLOUD_BIN_TO_USE" components install kubectl --quiet
+                        "$GCLOUD_BIN_TO_USE" components install gke-gcloud-auth-plugin --quiet
+                        
+                        if [ ! -L /usr/local/bin/kubectl ] && [ ! -e /usr/local/bin/kubectl ]; then # Check if symlink is needed
+                           echo "    🔗 Creating symlink for kubectl to /usr/local/bin/kubectl..."
+                           sudo ln -sf "${GCLOUD_INSTALL_DIR}/bin/kubectl" /usr/local/bin/kubectl
+                           echo -e "    ${GREEN}✅ Kubectl symlink created.${RESET}"
+                        elif [ -L /usr/local/bin/kubectl ]; then
+                           echo -e "    ${GREEN}✅ Kubectl symlink already exists or managed elsewhere.${RESET}"
                         fi
                     else
-                        echo -e "    ${RED}❌ Google Cloud SDK core installation failed. See official docs.${RESET}"
+                        echo -e "    ${RED}❌ Google Cloud SDK core installation script failed. Please check output or try manually.${RESET}"
                     fi
                 else
-                    echo -e "    ${GREEN}✅ Google Cloud SDK already installed.${RESET}"
-                    echo "    Verifying/installing gcloud components (kubectl, gke-gcloud-auth-plugin) silently..."
-                    # Ensure GCLOUD_BIN is defined even if SDK was pre-existing
-                    if [ ! -x "$GCLOUD_BIN" ]; then # Try to find gcloud if path not set from install
-                        GCLOUD_BIN=$(which gcloud || echo "gcloud") # Fallback to just 'gcloud' if not in specific path
+                    GCLOUD_BIN_TO_USE=$(which gcloud)
+                    echo -e "    ${GREEN}✅ Google Cloud SDK (gcloud command found at $GCLOUD_BIN_TO_USE) is already installed or in PATH.${RESET}"
+                    
+                    # If gcloud was installed by this script in a *previous* run, GCLOUD_INSTALLED_HERE_FLAG would exist.
+                    # If it was installed manually or by other means, we just use `which gcloud`.
+                    if [ -f "$GCLOUD_INSTALLED_HERE_FLAG" ] && [ ! -x "${GCLOUD_INSTALL_DIR}/bin/gcloud" ]; then
+                         echo -e "    ${YELLOW}⚠️ SDK was previously installed by this script to $GCLOUD_INSTALL_DIR, but it's not found there now. Using system gcloud at $GCLOUD_BIN_TO_USE.${RESET}"
+                    fi
+
+                    echo "    🛠️  Verifying/installing gcloud components (kubectl, gke-gcloud-auth-plugin) silently using $GCLOUD_BIN_TO_USE..."
+                    if ! "$GCLOUD_BIN_TO_USE" components install kubectl --quiet; then
+                        echo -e "    ${RED}❌ Failed to install/verify kubectl component.${RESET}"
+                    else
+                        echo -e "    ${GREEN}✅ Kubectl component verified/installed.${RESET}"
+                    fi
+                    if ! "$GCLOUD_BIN_TO_USE" components install gke-gcloud-auth-plugin --quiet; then
+                        echo -e "    ${RED}❌ Failed to install/verify gke-gcloud-auth-plugin component.${RESET}"
+                    else
+                        echo -e "    ${GREEN}✅ gke-gcloud-auth-plugin component verified/installed.${RESET}"
                     fi
                     
-                    if [ -x "$GCLOUD_BIN" ] && [ "$GCLOUD_BIN" != "gcloud" ]; then # Found it
-                        "$GCLOUD_BIN" components install kubectl --quiet
-                        "$GCLOUD_BIN" components install gke-gcloud-auth-plugin --quiet
-                        if [ -L /usr/local/bin/kubectl ] || [ ! -e /usr/local/bin/kubectl ]; then
-                            sudo ln -sf "${GCLOUD_SDK_PATH}/bin/kubectl" /usr/local/bin/kubectl
-                            echo "    Ensured symlink for kubectl."
+                    # Check symlink for kubectl, even if gcloud was pre-existing
+                    # This is helpful if user installed gcloud but not kubectl symlink
+                    KUBECTL_TARGET_PATH="${GCLOUD_INSTALL_DIR}/bin/kubectl" # Default assumption
+                    if command -v "$GCLOUD_BIN_TO_USE" &>/dev/null && [[ "$GCLOUD_BIN_TO_USE" == *"/bin/gcloud" ]]; then # if it's a full path from `which`
+                        KUBECTL_TARGET_PATH="$(dirname "$GCLOUD_BIN_TO_USE")/kubectl"
+                    fi
+
+                    if [ -f "$KUBECTL_TARGET_PATH" ]; then
+                        if [ ! -L /usr/local/bin/kubectl ] && [ ! -e /usr/local/bin/kubectl ]; then
+                            echo "    🔗 Creating symlink for kubectl to /usr/local/bin/kubectl from $KUBECTL_TARGET_PATH..."
+                            sudo ln -sf "$KUBECTL_TARGET_PATH" /usr/local/bin/kubectl
+                            echo -e "    ${GREEN}✅ Kubectl symlink created.${RESET}"
+                        elif [ -L /usr/local/bin/kubectl ]; then
+                             REAL_SYMLINK_TARGET=$(readlink /usr/local/bin/kubectl)
+                             if [[ "$REAL_SYMLINK_TARGET" != "$KUBECTL_TARGET_PATH" ]]; then
+                                echo -e "    ${YELLOW}🔗 Kubectl symlink at /usr/local/bin/kubectl exists but points to $REAL_SYMLINK_TARGET instead of expected $KUBECTL_TARGET_PATH. Not changing.${RESET}"
+                             else
+                                echo -e "    ${GREEN}✅ Kubectl symlink already correctly points to $KUBECTL_TARGET_PATH.${RESET}"
+                             fi
+                        else
+                           echo -e "    ${YELLOW}⚠️ /usr/local/bin/kubectl exists and is not a symlink. Not overwriting.${RESET}"
                         fi
-                    elif command -v gcloud &>/dev/null; then # gcloud is in PATH but not our specific GCLOUD_SDK_PATH
-                        gcloud components install kubectl --quiet
-                        gcloud components install gke-gcloud-auth-plugin --quiet
-                         # Symlink for kubectl might still be useful if not already managed by user's gcloud setup
-                        KUBECTL_PATH=$(which kubectl)
-                        if [ "${KUBECTL_PATH}" != "/usr/local/bin/kubectl" ] && ([ -L /usr/local/bin/kubectl ] || [ ! -e /usr/local/bin/kubectl ]); then
-                           echo "    ${YELLOW}Note: kubectl found at $KUBECTL_PATH. Symlink to /usr/local/bin/kubectl not forced if already present elsewhere.${RESET}"
-                        fi 
                     else
-                        echo "    ${RED}❌ gcloud command not found. Cannot install components.${RESET}"
+                         echo -e "    ${YELLOW}⚠️ Could not determine kubectl path from $GCLOUD_BIN_TO_USE to create symlink.${RESET}"
                     fi
                 fi
                 ;;
@@ -447,10 +475,54 @@ do_installation() {
                     fi
                 fi
                 ;;
-            security_verify_path)
-                # For SentinelOne, it's verification only. No install step here.
-                echo -e "    ${YELLOW}ℹ️ $display_name is for verification only. Please install via IT if missing.${RESET}"
-                if ! check_application "$app_path_name" "$display_name"; then : ; fi # Just run check for its output
+            security_verify_path) # Handles SentinelOne installation
+                if [[ "$id" == "sentinelone" ]]; then
+                    if ! check_sentinelone &>/dev/null; then # Check silently using the dedicated function
+                        echo "    SentinelOne is not detected."
+                        if [ -n "$SENTINELONE_TOKEN" ] && [ -n "$SENTINELONE_DOWNLOAD_LINK" ]; then
+                            echo "    🔑 Token and download link provided. Attempting SentinelOne installation..."
+                            echo "    📥 Downloading SentinelOne installer (${SENTINELONE_PKG_NAME} from ${SENTINELONE_DOWNLOAD_LINK})..."
+                            
+                            if curl -L -o "/tmp/${SENTINELONE_PKG_NAME}" "${SENTINELONE_DOWNLOAD_LINK}"; then
+                                echo -e "    ${GREEN}✅ Download complete.${RESET}"
+                                
+                                echo "    📝 Creating token file for SentinelOne..."
+                                echo "$SENTINELONE_TOKEN" > "/tmp/com.sentinelone.registration-token"
+                                # Ensure root can read it, installer runs as root
+                                sudo chmod 644 "/tmp/com.sentinelone.registration-token"
+
+                                echo "    🚀 Installing SentinelOne agent (this will require sudo password)..."
+                                if sudo /usr/sbin/installer -pkg "/tmp/${SENTINELONE_PKG_NAME}" -target /; then
+                                    echo -e "    ${GREEN}✅ SentinelOne installation command executed.${RESET}"
+                                    # Brief pause for agent to potentially register/start
+                                    sleep 15
+                                    if check_sentinelone; then 
+                                        echo -e "    ${GREEN}🎉 SentinelOne is now installed and detected!${RESET}"
+                                    else
+                                        echo -e "    ${YELLOW}⚠️ SentinelOne installation command ran, but agent not immediately detected. It might be starting or requires a reboot. Please verify manually.${RESET}"
+                                    fi
+                                else
+                                    echo -e "    ${RED}❌ SentinelOne installation command failed. Check installer output.${RESET}"
+                                fi
+                                
+                                echo "    🧹 Cleaning up temporary SentinelOne files..."
+                                sudo rm -f "/tmp/com.sentinelone.registration-token"
+                                rm -f "/tmp/${SENTINELONE_PKG_NAME}"
+                            else
+                                echo -e "    ${RED}❌ Failed to download SentinelOne installer from the provided link.${RESET}"
+                            fi
+                        else
+                            echo -e "    ${YELLOW}⚠️ SentinelOne token and/or download link not provided. Skipping installation.${RESET}"
+                            echo -e "    ${YELLOW}   Use --sentinelone-token <token> and --sentinelone-link <url> to enable installation.${RESET}"
+                        fi
+                    else
+                        echo -e "    ${GREEN}✅ SentinelOne already installed.${RESET}"
+                    fi
+                else
+                    # Fallback for other security_verify_path types if any are added later
+                    echo -e "    ${YELLOW}ℹ️ $display_name is for verification only. Please install via IT if missing.${RESET}"
+                    if ! check_application "$app_path_name" "$display_name"; then : ; fi
+                fi
                 ;;
             *)
                 echo -e "    ${YELLOW}⚠️ Warning: Unknown app type '$type' for $display_name. No installation rule defined.${RESET}"
