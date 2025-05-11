@@ -67,19 +67,35 @@ This script provides a foundational framework for setting up a Windows developme
 ### How to Run (Windows):
 
 1.  **Ensure Execution Policy Allows Scripts:**
-    *   Open PowerShell.
-    *   Check current policy: `Get-ExecutionPolicy -Scope CurrentUser` (or `Get-ExecutionPolicy -List` to see all scopes).
-    *   If 'Restricted', change it (you might need to open PowerShell as Administrator to change policies, even for `CurrentUser` scope sometimes, depending on system configuration):
-        ```powershell
-        Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
-        ```
-        *(Answer `Y` or `A` if prompted, though `-Force` should suppress it.)*
+    Windows PowerShell has an execution policy to prevent accidental running of malicious scripts. You have a few options:
+
+    *   **Option A: Set Policy for Current User (Recommended for ongoing use):**
+        *   Open PowerShell **as Administrator**.
+        *   Run: `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force`
+        *   This allows local scripts (like this one, once saved to your machine) and remote scripts that are digitally signed to run.
+
+    *   **Option B: Bypass Policy for a Single Execution (If Option A is not desired/possible):**
+        *   Open PowerShell (normal or Administrator, depending on what the script itself will do).
+        *   You can bypass the policy for a single command execution directly:
+            ```powershell
+            powershell.exe -ExecutionPolicy Bypass -File .\setup.ps1 -Help
+            ```
+        *   Or, from within an existing PowerShell session, for that session only (process scope):
+            ```powershell
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            .\setup.ps1 -Help 
+            # Optionally, revert after: Set-ExecutionPolicy Undefined -Scope Process -Force 
+            # (or simply close the PowerShell window, as -Scope Process is temporary)
+            ```
+        *   **Caution**: Using `-ExecutionPolicy Bypass` disables an important security feature. Only use it if you fully trust the script.
+
+    *   **Check Current Policy:** `Get-ExecutionPolicy -List` (to see all scopes) or `Get-ExecutionPolicy` (for the most effective one).
 
 2.  **Navigate to the Script Directory:**
     *   Open PowerShell.
     *   Example: `cd C:\path\to\antidote\setup\pc\win`
 
-3.  **Run the Script:**
+3.  **Run the Script (after handling execution policy):**
     *   **Show Help:**
         ```powershell
         .\setup.ps1 -Help
