@@ -478,7 +478,7 @@ do_installation() {
             security_verify_path) # Handles SentinelOne installation
                 if [[ "$id" == "sentinelone" ]]; then
                     if ! check_sentinelone &>/dev/null; then # Check silently using the dedicated function
-                        echo "    SentinelOne is not detected."
+                        echo "    ℹ️ SentinelOne is not detected by current checks."
                         if [ -n "$SENTINELONE_TOKEN" ] && [ -n "$SENTINELONE_DOWNLOAD_LINK" ]; then
                             echo "    🔑 Token and download link provided. Attempting SentinelOne installation..."
                             echo "    📥 Downloading SentinelOne installer (${SENTINELONE_PKG_NAME} from ${SENTINELONE_DOWNLOAD_LINK})..."
@@ -487,22 +487,25 @@ do_installation() {
                                 echo -e "    ${GREEN}✅ Download complete.${RESET}"
                                 
                                 echo "    📝 Creating token file for SentinelOne..."
-                                echo "$SENTINELONE_TOKEN" > "/tmp/com.sentinelone.registration-token"
-                                # Ensure root can read it, installer runs as root
+                                # Create the token file in /tmp first, then sudo move and chmod, or echo with sudo tee
+                                TMP_TOKEN_FILE="/tmp/com.sentinelone.registration-token-$RANDOM"
+                                echo "$SENTINELONE_TOKEN" > "$TMP_TOKEN_FILE"
+                                sudo mv "$TMP_TOKEN_FILE" "/tmp/com.sentinelone.registration-token" # Overwrite if exists
                                 sudo chmod 644 "/tmp/com.sentinelone.registration-token"
+                                sudo chown root "/tmp/com.sentinelone.registration-token" # Ensure root owns it for installer
 
                                 echo "    🚀 Installing SentinelOne agent (this will require sudo password)..."
                                 if sudo /usr/sbin/installer -pkg "/tmp/${SENTINELONE_PKG_NAME}" -target /; then
                                     echo -e "    ${GREEN}✅ SentinelOne installation command executed.${RESET}"
-                                    # Brief pause for agent to potentially register/start
-                                    sleep 15
+                                    echo "    ⏳ Waiting a bit for agent to initialize..."
+                                    sleep 15 # Brief pause for agent to potentially register/start
                                     if check_sentinelone; then 
                                         echo -e "    ${GREEN}🎉 SentinelOne is now installed and detected!${RESET}"
                                     else
                                         echo -e "    ${YELLOW}⚠️ SentinelOne installation command ran, but agent not immediately detected. It might be starting or requires a reboot. Please verify manually.${RESET}"
                                     fi
                                 else
-                                    echo -e "    ${RED}❌ SentinelOne installation command failed. Check installer output.${RESET}"
+                                    echo -e "    ${RED}❌ SentinelOne installation command failed. Check installer output and /var/log/install.log.${RESET}"
                                 fi
                                 
                                 echo "    🧹 Cleaning up temporary SentinelOne files..."
@@ -511,17 +514,21 @@ do_installation() {
                             else
                                 echo -e "    ${RED}❌ Failed to download SentinelOne installer from the provided link.${RESET}"
                             fi
-                        else
-                            echo -e "    ${YELLOW}⚠️ SentinelOne token and/or download link not provided. Skipping installation.${RESET}"
-                            echo -e "    ${YELLOW}   Use --sentinelone-token <token> and --sentinelone-link <url> to enable installation.${RESET}"
+                        else # No token/link provided
+                            echo -e "    ${YELLOW}⚠️ SentinelOne token and/or download link not provided. Installation via script skipped.${RESET}"
+                            echo -e "    ${YELLOW}   Please install SentinelOne via IT or provide --sentinelone-token and --sentinelone-link.${RESET}"
+                            # No explicit ((missing_tools++)) here as it's an optional install via script
                         fi
-                    else
-                        echo -e "    ${GREEN}✅ SentinelOne already installed.${RESET}"
+                    else # Already installed
+                        echo -e "    ${GREEN}✅ SentinelOne already installed and detected.${RESET}"
                     fi
                 else
-                    # Fallback for other security_verify_path types if any are added later
-                    echo -e "    ${YELLOW}ℹ️ $display_name is for verification only. Please install via IT if missing.${RESET}"
-                    if ! check_application "$app_path_name" "$display_name"; then : ; fi
+                    # Fallback for other (future) security_verify_path types if any are added later
+                    echo -n "    " # Indent the output of check_application
+                    if ! check_application "$app_path_name" "$display_name"; then 
+                        echo -e "    ${YELLOW}ℹ️ Please install $display_name via IT if it is required and missing.${RESET}"
+                        # ((missing_tools++)) # Decide if generic uninstalled security_verify_path apps are errors
+                    fi
                 fi
                 ;;
             *)
