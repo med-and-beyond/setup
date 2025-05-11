@@ -92,7 +92,23 @@ $AppsDefinitions = @(
 
 function Show-Usage {
     Write-HostColorized "This script is under development. Current parameters:" $ColorYellow
-    Get-Help $MyInvocation.MyCommand.Definition -Full | Out-String | Write-Host
+    
+    # Replace problematic Get-Help call with direct help text
+    Write-HostColorized "Usage: .\setup.ps1 [options]" $ColorYellow
+    Write-HostColorized "Options:" $ColorYellow
+    Write-HostColorized "  -Help                Show this help message" $ColorYellow
+    Write-HostColorized "  -Certification       Check what tools are missing for selected profile" $ColorYellow
+    Write-HostColorized "  -Install             Install all required tools for selected profile" $ColorYellow
+    Write-HostColorized "  -Profile <string>    User profile (engineering, data, or other). Default: other" $ColorYellow
+    Write-HostColorized "  -AutomoxKey <string> Automox access key for installation" $ColorYellow
+    Write-HostColorized "  -SentinelOneToken <string> SentinelOne registration token" $ColorYellow
+    
+    Write-HostColorized "Examples:" $ColorYellow
+    Write-HostColorized "  .\setup.ps1 -Help" $ColorYellow
+    Write-HostColorized "  .\setup.ps1 -Certification -Profile engineering" $ColorYellow
+    Write-HostColorized "  .\setup.ps1 -Install -Profile data -SentinelOneToken YOUR_S1_TOKEN" $ColorYellow
+    Write-HostColorized "  .\setup.ps1 -Install -Profile engineering -AutomoxKey YOUR_AM_KEY -SentinelOneToken YOUR_S1_TOKEN" $ColorYellow
+    
     exit 1
 }
 
