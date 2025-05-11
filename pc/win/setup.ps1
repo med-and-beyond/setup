@@ -93,7 +93,6 @@ $AppsDefinitions = @(
 function Show-Usage {
     Write-HostColorized "This script is under development. Current parameters:" $ColorYellow
     Get-Help $MyInvocation.MyCommand.Definition -Full | Out-String | Write-Host
-    # Detailed usage will be built out later
     exit 1
 }
 
@@ -109,9 +108,9 @@ function Invoke-Certification {
     Write-HostColorized "🤔 Checking required tools..." $ColorYellow
 
     $missingTools = 0
-    $securityWarnings = 0 # Placeholder
+    $securityWarnings = 0
 
-    Write-HostColorized "`n🔧 CHECKING TOOLS & APPLICATIONS FOR PROFILE: $($Profile.ToUpper())" $ColorBlue
+    Write-HostColorized "`n🔧 CHECKING TOOLS `& APPLICATIONS FOR PROFILE: $($Profile.ToUpper())" $ColorBlue
 
     foreach ($appDef in $AppsDefinitions) {
         if (-not (Test-IsAppForProfile $appDef.Profiles)) {
@@ -121,8 +120,6 @@ function Invoke-Certification {
         Write-Host -NoNewline "🤔 Checking $($appDef.DisplayName)... "
         $installed = $false
         
-        # TODO: Implement actual checks based on $appDef.Type
-        # Example placeholder:
         if ($appDef.VerificationCommand) {
             try {
                 Invoke-Expression $appDef.VerificationCommand -ErrorAction Stop -OutVariable null | Out-Null
@@ -136,7 +133,6 @@ function Invoke-Certification {
             }
         } else {
             Write-HostColorized " (No verification method defined for type $($appDef.Type))" $ColorYellow
-            # Consider it missing or uncheckable for now
         }
 
         if ($installed) {
@@ -147,7 +143,6 @@ function Invoke-Certification {
         }
     }
     
-    # Placeholder for general security checks (e.g., TeamViewer)
     Write-HostColorized "`n🛡️  CHECKING GENERAL SECURITY: (Placeholder)" $ColorBlue
 
     Write-HostColorized "`n📊 SUMMARY:" $ColorBlue
@@ -159,7 +154,6 @@ function Invoke-Certification {
             Write-HostColorized "❌ Found $missingTools missing tool(s) for profile '$($Profile.ToUpper())'" $ColorRed
             Write-HostColorized "Run with -Install -Profile $Profile to install missing tools" $ColorYellow
         }
-        # Add security warning summary here if implemented
         return $false
     }
 }
@@ -167,12 +161,7 @@ function Invoke-Certification {
 function Invoke-Installation {
     Write-HostColorized "🚀 Performing installation for profile: $($Profile.ToUpper())" $ColorBlue
 
-    # TODO: Add pre-flight checks (e.g., admin rights if needed for Chocolatey install/config)
-    # Check if script is run as Administrator if choco install/config is needed
-    # $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    # if (-not $isAdmin) { Write-HostColorized "❌ This script needs to be run as Administrator to install/configure some tools." $ColorRed; exit 1 }
-
-    Write-HostColorized "`n🔧 INSTALLING TOOLS & APPLICATIONS FOR PROFILE: $($Profile.ToUpper())" $ColorBlue
+    Write-HostColorized "`n🔧 INSTALLING TOOLS `& APPLICATIONS FOR PROFILE: $($Profile.ToUpper())" $ColorBlue
 
     foreach ($appDef in $AppsDefinitions) {
         if (-not (Test-IsAppForProfile $appDef.Profiles)) {
@@ -181,18 +170,10 @@ function Invoke-Installation {
 
         Write-HostColorized "`n➡️  Processing $($appDef.DisplayName)..." $ColorGreen
         
-        # TODO: Implement actual check if installed first, then install logic based on $appDef.Type
-        # e.g., choco install $appDef.ChocoPackageName -y
-        # e.g., Start-BitsTransfer -Source $appDef.DownloadUrl -Destination ... ; & installer.exe /S
-        
         if ($appDef.ID -eq "automox" -and -not [string]::IsNullOrWhiteSpace($AutomoxKey)) {
             Write-HostColorized "   Attempting Automox installation (Windows method TBD)... Access Key: $AutomoxKey" $ColorYellow
-            # Windows equivalent for: curl -sS "https://console.automox.com/downloadInstaller?accesskey=KEY" | sudo bash
-            # This will likely involve downloading an MSI/EXE and running it with the key as a parameter if supported, or registry/file token.
         } elseif ($appDef.ID -eq "sentinelone" -and -not [string]::IsNullOrWhiteSpace($SentinelOneToken)) {
             Write-HostColorized "   Attempting SentinelOne installation (Windows method TBD)... Token: $SentinelOneToken" $ColorYellow
-            # Windows equivalent for: curl -L -o pkg; echo token > file; installer -pkg ...
-            # This will require a Windows .msi or .exe installer and a way to pass the token (e.g., command line switch, config file).
         } else {
             Write-HostColorized "   (Placeholder for $($appDef.DisplayName) installation - Type: $($appDef.Type))" $ColorYellow
         }
@@ -209,7 +190,6 @@ if ($Help) {
 }
 
 Write-HostColorized "ℹ️ Selected profile: $($Profile.ToUpper())" $ColorBlue
-# Profile value already validated by ValidateSet in param block
 
 if (-not $Certification -and -not $Install) {
     Write-HostColorized "❌ No action specified (e.g., -Certification or -Install)." $ColorRed
