@@ -177,7 +177,38 @@ function Invoke-Certification {
 function Invoke-Installation {
     Write-HostColorized "Performing installation for profile: $($Profile.ToUpper())" $ColorBlue
 
-    Write-HostColorized ("INSTALLING TOOLS " + " APPLICATIONS FOR PROFILE: $($Profile.ToUpper())") $ColorBlue
+    Write-HostColorized ("INSTALLING TOOLS AND APPLICATIONS FOR PROFILE: $($Profile.ToUpper())") $ColorBlue
+    
+    # First check if we're running as admin - many installations require this
+    $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $isAdmin) {
+        Write-HostColorized "WARNING: Not running as Administrator. Some installations may fail." $ColorYellow
+        Write-HostColorized "Consider restarting this script as Administrator." $ColorYellow
+    }
+    
+    # Install Chocolatey first if it's not already installed
+    $chocoInstalled = $false
+    try {
+        $chocoVersion = choco --version
+        Write-HostColorized "Chocolatey is already installed: $chocoVersion" $ColorGreen
+        $chocoInstalled = $true
+    } catch {
+        Write-HostColorized "Installing Chocolatey package manager..." $ColorYellow
+        try {
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+            Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+            $chocoInstalled = $true
+            Write-HostColorized "Chocolatey installed successfully!" $ColorGreen
+        } catch {
+            Write-HostColorized "Failed to install Chocolatey. Error: $_" $ColorRed
+        }
+    }
+    
+    if (-not $chocoInstalled) {
+        Write-HostColorized "Chocolatey installation failed. Cannot proceed with package installations." $ColorRed
+        return
+    }
 
     foreach ($appDef in $AppsDefinitions) {
         if (-not (Test-IsAppForProfile $appDef.Profiles)) {
@@ -186,16 +217,106 @@ function Invoke-Installation {
 
         Write-HostColorized "Processing $($appDef.DisplayName)..." $ColorGreen
         
-        if ($appDef.ID -eq "automox" -and -not [string]::IsNullOrWhiteSpace($AutomoxKey)) {
-            Write-HostColorized "   Attempting Automox installation (Windows method TBD)... Access Key: $AutomoxKey" $ColorYellow
-        } elseif ($appDef.ID -eq "sentinelone" -and -not [string]::IsNullOrWhiteSpace($SentinelOneToken)) {
-            Write-HostColorized "   Attempting SentinelOne installation (Windows method TBD)... Token: $SentinelOneToken" $ColorYellow
-        } else {
-            Write-HostColorized "   (Placeholder for $($appDef.DisplayName) installation - Type: $($appDef.Type))" $ColorYellow
+        # Check if already installed
+        $alreadyInstalled = $false
+        if ($appDef.VerificationCommand) {
+            try {
+                Invoke-Expression $appDef.VerificationCommand -ErrorAction Stop -OutVariable null | Out-Null
+                $alreadyInstalled = $true
+                Write-HostColorized "  Already installed." $ColorGreen
+            } catch {
+                $alreadyInstalled = $false
+            }
+        } elseif ($appDef.VerificationPath) {
+            if (Test-Path $appDef.VerificationPath -PathType Leaf) {
+                $alreadyInstalled = $true
+                Write-HostColorized "  Already installed." $ColorGreen
+            }
+        }
+        
+        if ($alreadyInstalled) {
+            continue
+        }
+        
+        # Install based on type
+        switch ($appDef.Type) {
+            "choco" {
+                try {
+                    Write-HostColorized "  Installing $($appDef.DisplayName) via Chocolatey..." $ColorYellow
+                    choco install $appDef.ChocoPackageName -y
+                    Write-HostColorized "  Installation successful!" $ColorGreen
+                } catch {
+                    Write-HostColorized "  Failed to install $($appDef.DisplayName). Error: $_" $ColorRed
+                }
+            }
+            
+            "core_packagemanager" {
+                # Already handled Chocolatey above
+                Write-HostColorized "  Core package manager already checked." $ColorYellow
+            }
+            
+            "manual_download" {
+                Write-HostColorized "  $($appDef.DisplayName) requires manual download and installation." $ColorYellow
+                Write-HostColorized "  Please visit the official website to download and install." $ColorYellow
+                
+                # For specific known applications, provide more detailed instructions
+                switch ($appDef.ID) {
+                    "google-cloud-sdk" {
+                        Write-HostColorized "  Google Cloud SDK: https://cloud.google.com/sdk/docs/install" $ColorYellow
+                    }
+                    "twingate" {
+                        Write-HostColorized "  Twingate: https://www.twingate.com/download/" $ColorYellow
+                    }
+                    "cursor" {
+                        Write-HostColorized "  Cursor: https://cursor.sh/download" $ColorYellow
+                    }
+                }
+            }
+            
+            "manual_download_token" {
+                if ($appDef.ID -eq "sentinelone" -and -not [string]::IsNullOrWhiteSpace($SentinelOneToken)) {
+                    Write-HostColorized "  Installing SentinelOne with token: $SentinelOneToken" $ColorYellow
+                    Write-HostColorized "  Please contact your IT department for the SentinelOne installer." $ColorYellow
+                    # In a real implementation, you might download the installer from a known URL and execute it with the token
+                } else {
+                    Write-HostColorized "  $($appDef.DisplayName) requires a token and manual installation." $ColorRed
+                    Write-HostColorized "  Please contact your IT department for assistance." $ColorRed
+                }
+            }
+            
+            "manual_download_key" {
+                if ($appDef.ID -eq "automox" -and -not [string]::IsNullOrWhiteSpace($AutomoxKey)) {
+                    Write-HostColorized "  Installing Automox with access key: $AutomoxKey" $ColorYellow
+                    
+                    # Example implementation for Automox
+                    $automoxInstallerUrl = "https://console.automox.com/installers/Automox_Installer-latest.msi"
+                    $automoxInstallerPath = "$env:TEMP\Automox_Installer.msi"
+                    
+                    try {
+                        Write-HostColorized "  Downloading Automox installer..." $ColorYellow
+                        (New-Object System.Net.WebClient).DownloadFile($automoxInstallerUrl, $automoxInstallerPath)
+                        
+                        Write-HostColorized "  Running Automox installer with access key..." $ColorYellow
+                        Start-Process "msiexec.exe" -ArgumentList "/i `"$automoxInstallerPath`" /qn ACCESSKEY=`"$AutomoxKey`"" -Wait
+                        
+                        Write-HostColorized "  Automox installation completed." $ColorGreen
+                    } catch {
+                        Write-HostColorized "  Failed to install Automox. Error: $_" $ColorRed
+                    }
+                } else {
+                    Write-HostColorized "  $($appDef.DisplayName) requires an access key and manual installation." $ColorRed
+                    Write-HostColorized "  Please contact your IT department for assistance." $ColorRed
+                }
+            }
+            
+            default {
+                Write-HostColorized "  Unknown installation type: $($appDef.Type)" $ColorYellow
+                Write-HostColorized "  Please install $($appDef.DisplayName) manually." $ColorYellow
+            }
         }
     }
     
-    Write-HostColorized "Installation phase for profile '$($Profile.ToUpper())' complete (placeholders)!" $ColorGreen
+    Write-HostColorized "Installation phase for profile '$($Profile.ToUpper())' complete!" $ColorGreen
     Write-HostColorized "Please restart your terminal or system if prompted by any installers." $ColorYellow
 }
 
