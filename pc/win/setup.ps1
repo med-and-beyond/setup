@@ -48,7 +48,7 @@ $AppsDefinitions = @(
     @{ ID = "chocolatey"; DisplayName = "Chocolatey Package Manager"; Type = "core_packagemanager"; Profiles = "all"; VerificationCommand = "choco --version" }
 
     # Google Cloud SDK
-    @{ ID = "google-cloud-sdk"; DisplayName = "Google Cloud SDK"; Type = "manual_download"; Profiles = "all"; ChocoPackageName = "gcloudsdk"; VerificationCommand = "gcloud --version" } # Choco is an option
+    @{ ID = "google-cloud-sdk"; DisplayName = "Google Cloud SDK"; Type = "direct_download"; Profiles = "all"; DownloadUrl = "https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe"; VerificationCommand = "gcloud --version" }
 
     # CLI tools
     @{ ID = "jq"; DisplayName = "jq"; Type = "choco"; Profiles = "all"; ChocoPackageName = "jq"; VerificationCommand = "jq --version" }
@@ -58,9 +58,9 @@ $AppsDefinitions = @(
     # GUI Applications (many available via Chocolatey)
     @{ ID = "docker"; DisplayName = "Docker Desktop"; Type = "choco"; Profiles = "engineering"; ChocoPackageName = "docker-desktop"; VerificationPath = "$($env:ProgramFiles)\Docker\Docker\Docker Desktop.exe" }
     @{ ID = "slack"; DisplayName = "Slack"; Type = "choco"; Profiles = "all"; ChocoPackageName = "slack"; VerificationPath = "$($env:LOCALAPPDATA)\Slack\slack.exe" }
-    @{ ID = "twingate"; DisplayName = "Twingate"; Type = "manual_download"; Profiles = "all"; VerificationPath = "$($env:ProgramFiles)\Twingate\Twingate.exe" } # Assuming default path
-    @{ ID = "nordpass"; DisplayName = "NordPass"; Type = "direct_download"; Profiles = "all"; DownloadUrl = "https://downloads.npass.app/windows/NordPassSetup.exe"; VerificationPath = "$($env:ProgramFiles)\NordPass\NordPass.exe" }
-    @{ ID = "cursor"; DisplayName = "Cursor"; Type = "manual_download"; Profiles = "engineering,data"; VerificationPath = "$($env:LOCALAPPDATA)\Programs\cursor\Cursor.exe" } # Assuming default path
+    @{ ID = "twingate"; DisplayName = "Twingate"; Type = "direct_download"; Profiles = "all"; DownloadUrl = "https://www.twingate.com/download/Twingate-windows-x86_64.msi"; VerificationPath = "$($env:ProgramFiles)\Twingate\Twingate.exe" }
+    @{ ID = "nordpass"; DisplayName = "NordPass"; Type = "direct_download"; Profiles = "all"; DownloadUrl = "https://downloads.npass.app/windows/NordPassSetup.exe"; VerificationPath = "$($env:LOCALAPPDATA)\Programs\NordPass\NordPass.exe" }
+    @{ ID = "cursor"; DisplayName = "Cursor"; Type = "direct_download"; Profiles = "engineering,data"; DownloadUrl = "https://download.cursor.sh/windows/Cursor-Setup.exe"; VerificationPath = "$($env:LOCALAPPDATA)\Programs\cursor\Cursor.exe" }
     @{ ID = "dbeaver"; DisplayName = "DBeaver Community"; Type = "choco"; Profiles = "engineering,data"; ChocoPackageName = "dbeaver"; VerificationPath = "$($env:ProgramFiles)\DBeaver\dbeaver.exe" }
     @{ ID = "vscode"; DisplayName = "Visual Studio Code"; Type = "choco"; Profiles = "engineering,data"; ChocoPackageName = "vscode"; VerificationCommand = "code --version" }
 
@@ -240,13 +240,26 @@ function Invoke-Installation {
                     }
                     
                     # Download the installer
-                    $installerPath = "$tempDir\$($appDef.ID)_installer.exe"
+                    $installerFileName = [System.IO.Path]::GetFileName($appDef.DownloadUrl)
+                    $installerPath = "$tempDir\$installerFileName"
                     Write-HostColorized "  Downloading from $($appDef.DownloadUrl)..." $ColorYellow
                     (New-Object System.Net.WebClient).DownloadFile($appDef.DownloadUrl, $installerPath)
                     
-                    # Run the installer
+                    # Run the installer with appropriate arguments based on file type
                     Write-HostColorized "  Running installer..." $ColorYellow
-                    Start-Process -FilePath $installerPath -ArgumentList "/S", "/quiet", "/norestart" -Wait
+                    $fileExtension = [System.IO.Path]::GetExtension($installerPath).ToLower()
+                    
+                    if ($fileExtension -eq ".msi") {
+                        # MSI installer
+                        Start-Process "msiexec.exe" -ArgumentList "/i `"$installerPath`" /quiet /norestart" -Wait
+                    } elseif ($appDef.ID -eq "google-cloud-sdk") {
+                        # Special case for Google Cloud SDK - needs interactive installer
+                        Write-HostColorized "  Google Cloud SDK requires interactive installation. Launching installer..." $ColorYellow
+                        Start-Process -FilePath $installerPath -Wait
+                    } else {
+                        # EXE installer - assume silent install flags
+                        Start-Process -FilePath $installerPath -ArgumentList "/S", "/quiet", "/norestart" -Wait
+                    }
                     
                     Write-HostColorized "  Installation completed. Cleaning up..." $ColorGreen
                     Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
