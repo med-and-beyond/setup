@@ -48,7 +48,7 @@ $AppsDefinitions = @(
     @{ ID = "chocolatey"; DisplayName = "Chocolatey Package Manager"; Type = "core_packagemanager"; Profiles = "all"; VerificationCommand = "choco --version" }
 
     # Google Cloud SDK
-    @{ ID = "google-cloud-sdk"; DisplayName = "Google Cloud SDK"; Type = "direct_download"; Profiles = "all"; DownloadUrl = "https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe"; VerificationCommand = "gcloud --version" }
+    @{ ID = "google-cloud-sdk"; DisplayName = "Google Cloud SDK"; Type = "direct_download"; Profiles = "all"; DownloadUrl = "https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe"; VerificationPath = "$($env:ProgramFiles)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd" }
 
     # CLI tools
     @{ ID = "jq"; DisplayName = "jq"; Type = "choco"; Profiles = "all"; ChocoPackageName = "jq"; VerificationCommand = "jq --version" }
@@ -58,7 +58,7 @@ $AppsDefinitions = @(
     # GUI Applications (many available via Chocolatey)
     @{ ID = "docker"; DisplayName = "Docker Desktop"; Type = "choco"; Profiles = "engineering"; ChocoPackageName = "docker-desktop"; VerificationPath = "$($env:ProgramFiles)\Docker\Docker\Docker Desktop.exe" }
     @{ ID = "slack"; DisplayName = "Slack"; Type = "choco"; Profiles = "all"; ChocoPackageName = "slack"; VerificationPath = "$($env:LOCALAPPDATA)\Slack\slack.exe" }
-    @{ ID = "twingate"; DisplayName = "Twingate"; Type = "direct_download"; Profiles = "all"; DownloadUrl = "https://www.twingate.com/download/Twingate-windows-x86_64.msi"; VerificationPath = "$($env:ProgramFiles)\Twingate\Twingate.exe" }
+    @{ ID = "twingate"; DisplayName = "Twingate"; Type = "direct_download"; Profiles = "all"; DownloadUrl = "https://api.twingate.com/download/windows?installer=msi"; VerificationPath = "$($env:ProgramFiles)\Twingate\Twingate.exe" }
     @{ ID = "nordpass"; DisplayName = "NordPass"; Type = "direct_download"; Profiles = "all"; DownloadUrl = "https://downloads.npass.app/windows/NordPassSetup.exe"; VerificationPath = "$($env:LOCALAPPDATA)\Programs\NordPass\NordPass.exe" }
     @{ ID = "cursor"; DisplayName = "Cursor"; Type = "direct_download"; Profiles = "engineering,data"; DownloadUrl = "https://download.cursor.sh/windows/Cursor-Setup.exe"; VerificationPath = "$($env:LOCALAPPDATA)\Programs\cursor\Cursor.exe" }
     @{ ID = "dbeaver"; DisplayName = "DBeaver Community"; Type = "choco"; Profiles = "engineering,data"; ChocoPackageName = "dbeaver"; VerificationPath = "$($env:ProgramFiles)\DBeaver\dbeaver.exe" }
@@ -132,8 +132,32 @@ function Invoke-Certification {
         if ($installed) {
             Write-HostColorized "[OK]" $ColorGreen
         } else {
-            Write-HostColorized "[MISSING]" $ColorRed
-            $missingTools++
+            # Special case for Google Cloud SDK which might need PATH refresh
+            if ($appDef.ID -eq "google-cloud-sdk") {
+                # Try alternative installation paths
+                $alternativePaths = @(
+                    "$($env:ProgramFiles)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd",
+                    "$env:LOCALAPPDATA\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd",
+                    "$HOME\google-cloud-sdk\bin\gcloud.cmd"
+                )
+                
+                foreach ($path in $alternativePaths) {
+                    if (Test-Path $path -PathType Leaf) {
+                        $installed = $true
+                        Write-HostColorized "[OK] (Requires terminal restart to use commands)" $ColorGreen
+                        break
+                    }
+                }
+                
+                # If still not found
+                if (-not $installed) {
+                    Write-HostColorized "[MISSING]" $ColorRed
+                    $missingTools++
+                }
+            } else {
+                Write-HostColorized "[MISSING]" $ColorRed
+                $missingTools++
+            }
         }
     }
     
@@ -255,6 +279,7 @@ function Invoke-Installation {
                     } elseif ($appDef.ID -eq "google-cloud-sdk") {
                         # Special case for Google Cloud SDK - needs interactive installer
                         Write-HostColorized "  Google Cloud SDK requires interactive installation. Launching installer..." $ColorYellow
+                        Write-HostColorized "  NOTE: After installation completes, you may need to restart your terminal to use gcloud commands." $ColorYellow
                         Start-Process -FilePath $installerPath -Wait
                     } else {
                         # EXE installer - assume silent install flags
@@ -263,6 +288,12 @@ function Invoke-Installation {
                     
                     Write-HostColorized "  Installation completed. Cleaning up..." $ColorGreen
                     Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
+                    
+                    # Special handling for Google Cloud SDK
+                    if ($appDef.ID -eq "google-cloud-sdk") {
+                        Write-HostColorized "  ⚠️ NOTE: You need to restart your terminal to use the gcloud command." $ColorYellow
+                        Write-HostColorized "  Google Cloud SDK installation typically adds itself to PATH during install." $ColorYellow
+                    }
                 } catch {
                     Write-HostColorized "  Failed to install $($appDef.DisplayName). Error: $_" $ColorRed
                 }
@@ -300,6 +331,7 @@ function Invoke-Installation {
     
     Write-HostColorized "Installation phase for profile '$($Profile.ToUpper())' complete!" $ColorGreen
     Write-HostColorized "Note: Security tools (Automox and SentinelOne) are managed by Intune." $ColorBlue
+    Write-HostColorized "⚠️ IMPORTANT: You may need to restart your terminal or PowerShell session to use newly installed tools." $ColorYellow
     Write-HostColorized "Please restart your terminal or system if prompted by any installers." $ColorYellow
 }
 
