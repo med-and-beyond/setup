@@ -110,7 +110,7 @@ function Invoke-Certification {
     $missingTools = 0
     $securityWarnings = 0
 
-    Write-HostColorized ("🔧 CHECKING TOOLS " + " APPLICATIONS FOR PROFILE: $($Profile.ToUpper())") $ColorBlue
+    Write-HostColorized ("CHECKING TOOLS " + " APPLICATIONS FOR PROFILE: $($Profile.ToUpper())") $ColorBlue
 
     foreach ($appDef in $AppsDefinitions) {
         if (-not (Test-IsAppForProfile $appDef.Profiles)) {
