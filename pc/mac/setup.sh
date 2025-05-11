@@ -367,11 +367,7 @@ do_installation() {
                                 echo "source '${GCLOUD_INSTALL_DIR}/path.zsh.inc'" >> "${HOME}/.zshrc"
                                 echo "source '${GCLOUD_INSTALL_DIR}/completion.zsh.inc'" >> "${HOME}/.zshrc"
                             fi
-                            
-                            GCLOUD_BIN_TO_USE="${GCLOUD_INSTALL_DIR}/bin/gcloud"
-                            echo -e "    ${YELLOW}🔔 Initializing Google Cloud SDK (using $GCLOUD_BIN_TO_USE)... Please follow the prompts.${RESET}"
-                            "$GCLOUD_BIN_TO_USE" init 
-                            
+                                                        
                             echo "    🛠️  Installing gcloud components (kubectl, gke-gcloud-auth-plugin) silently..."
                             "$GCLOUD_BIN_TO_USE" components install kubectl --quiet
                             "$GCLOUD_BIN_TO_USE" components install gke-gcloud-auth-plugin --quiet
