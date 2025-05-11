@@ -9,7 +9,7 @@ This script helps set up a MacOS development environment by checking for and ins
 ### Features:
 
 *   **Certification Mode**: Checks if all required tools for a given profile are installed and reports missing items.
-*   **Installation Mode**: Installs missing tools for the selected profile. This includes Automox (if an access key is provided) and SentinelOne (if a token and download link are provided).
+*   **Installation Mode**: Installs missing tools for the selected profile. This includes Automox (if an access key is provided) and SentinelOne (if a token is provided; download URL is fixed).
 *   **Profile-based Setup**: Supports different configurations for 'engineering' and 'other' user profiles. Defaults to 'other' if no profile is specified.
 
 ### Requirements:
@@ -17,7 +17,7 @@ This script helps set up a MacOS development environment by checking for and ins
 *   MacOS
 *   Internet connection
 *   Automox Access Key (if you intend to install Automox via this script).
-*   SentinelOne Token and PKG Download Link (if you intend to install SentinelOne via this script).
+*   SentinelOne Token (if you intend to install SentinelOne via this script; the download URL is hardcoded in the script).
 
 ### Usage:
 
@@ -44,8 +44,7 @@ This script helps set up a MacOS development environment by checking for and ins
         ./setup.sh --install --profile engineering \
                    --automox-key YOUR_AM_KEY \
                    --sentinelone-token YOUR_S1_TOKEN \
-                   --sentinelone-link YOUR_S1_PKG_DOWNLOAD_URL \
-                   # --sentinelone-pkg-name "OptionalSentinelOneInstaller.pkg"
+                   # --sentinelone-pkg-name "OptionalSentinelOneInstaller.pkg" # SentinelOne download URL is fixed
         ```
         *Using curl to run directly from GitHub (ensure you understand the security implications of passing keys/tokens this way):*
         ```bash
@@ -54,16 +53,14 @@ This script helps set up a MacOS development environment by checking for and ins
         curl -fsSL https://raw.githubusercontent.com/YOUR_ORG/YOUR_REPO/main/pc/mac/setup.sh | bash -s -- \
            --install --profile engineering \
            --automox-key YOUR_AM_KEY \
-           --sentinelone-token YOUR_S1_TOKEN \
-           --sentinelone-link YOUR_S1_PKG_DOWNLOAD_URL
+           --sentinelone-token YOUR_S1_TOKEN
         ```
 
     *   **Check and Install in one command, including Automox and SentinelOne:**
         ```bash
         ./setup.sh -c -i --profile engineering \
                    --automox-key YOUR_AM_KEY \
-                   --sentinelone-token YOUR_S1_TOKEN \
-                   --sentinelone-link YOUR_S1_PKG_DOWNLOAD_URL
+                   --sentinelone-token YOUR_S1_TOKEN
         ```
         *(Note: `-c` is for `--certification`, `-i` is for `--install`)*
 
@@ -72,13 +69,13 @@ This script helps set up a MacOS development environment by checking for and ins
 *   **All Profiles:** Homebrew, Slack, Twingate, NordPass, Google Cloud SDK, jq.
     *   *Security Verification/Installation:*
         *   Automox (verification in cert mode; installation in install mode if `--automox-key` is provided)
-        *   SentinelOne (verification in cert mode; installation in install mode if `--sentinelone-token` and `--sentinelone-link` are provided)
+        *   SentinelOne (verification in cert mode; installation in install mode if `--sentinelone-token` is provided; download URL is fixed in the script)
 *   **Engineering Profile (includes 'All' plus):** k9s, GitHub CLI (gh), Docker, Cursor, DBeaver Community, Visual Studio Code, gkc.sh utility.
 
 ### Important Notes:
 
 *   **Automox Installation**: Requires `--automox-key YOUR_KEY_HERE` during `--install`.
-*   **SentinelOne Installation**: Requires `--sentinelone-token YOUR_TOKEN` and `--sentinelone-link YOUR_PKG_URL` during `--install`. You can optionally specify `--sentinelone-pkg-name "filename.pkg"` if your installer has a different name than the default `SentinelOneInstaller.pkg`.
+*   **SentinelOne Installation**: Requires `--sentinelone-token YOUR_TOKEN` during `--install`. The download URL for the SentinelOne package is hardcoded in the script to `https://storage.googleapis.com/antidote-public-assets/sentinelone/Sentinel-Release-macos.pkg`. You can optionally specify `--sentinelone-pkg-name "filename.pkg"` if the actual installer filename differs from the default `SentinelOneInstaller.pkg` (though the hardcoded URL implies a specific file).
 *   The script may prompt for your password (`sudo`) for some installations (e.g., Automox, SentinelOne, creating symlinks).
 *   Restart your terminal after installation for all changes to take effect.
 

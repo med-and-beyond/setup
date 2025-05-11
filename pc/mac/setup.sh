@@ -6,8 +6,8 @@
 SELECTED_PROFILE="other"
 AUTOMOX_ACCESS_KEY=""
 SENTINELONE_TOKEN=""
-SENTINELONE_DOWNLOAD_LINK=""
-SENTINELONE_PKG_NAME="SentinelOneInstaller.pkg" # Default package name
+# SENTINELONE_DOWNLOAD_LINK is now hardcoded in do_installation
+SENTINELONE_PKG_NAME="SentinelOneInstaller.pkg" # Default package name, can still be overridden
 
 # Color Codes
 RED=$(tput setaf 1)
@@ -69,17 +69,15 @@ Options:
     --profile <name>            Specify user profile (engineering or other). Defaults to 'other'.
     --automox-key <key>         Specify the Automox access key for installation.
     --sentinelone-token <token> Specify the SentinelOne registration token for installation.
-    --sentinelone-link <url>    Specify the SentinelOne PKG download URL for installation.
     --sentinelone-pkg-name <name> (Optional) Specify the SentinelOne PKG filename (defaults to SentinelOneInstaller.pkg).
 
 Examples:
     $0 --help
     $0 --certification --profile engineering
-    $0 --install --profile engineering --automox-key YOUR_AM_KEY
-    $0 --install --profile other --sentinelone-token YOUR_S1_TOKEN --sentinelone-link YOUR_S1_DOWNLOAD_URL
+    $0 --install --profile engineering --automox-key YOUR_AM_KEY --sentinelone-token YOUR_S1_TOKEN
 
 This script will manage the installation and verification of tools
-based on the selected profile.
+based on the selected profile. SentinelOne download URL is fixed.
 EOF
     exit 1
 }
@@ -462,7 +460,7 @@ do_installation() {
                 ;;
             security_verify_ps) # Handles Automox installation
                 if [[ "$id" == "automox" ]]; then
-                    if ! check_automox &>/dev/null; then # Check silently if it's running
+                    if ! check_automox &>/dev/null; then 
                         if [ -n "$AUTOMOX_ACCESS_KEY" ]; then
                             echo "    Installing Automox... (This will require sudo password)"
                             curl -sS "https://console.automox.com/downloadInstaller?accesskey=${AUTOMOX_ACCESS_KEY}" | sudo bash
@@ -477,28 +475,29 @@ do_installation() {
                 ;;
             security_verify_path) # Handles SentinelOne installation
                 if [[ "$id" == "sentinelone" ]]; then
-                    if ! check_sentinelone &>/dev/null; then # Check silently using the dedicated function
+                    local S1_PKG_URL="https://storage.googleapis.com/antidote-public-assets/sentinelone/Sentinel-Release-macos.pkg"
+                    
+                    if ! check_sentinelone &>/dev/null; then 
                         echo "    ℹ️ SentinelOne is not detected by current checks."
-                        if [ -n "$SENTINELONE_TOKEN" ] && [ -n "$SENTINELONE_DOWNLOAD_LINK" ]; then
-                            echo "    🔑 Token and download link provided. Attempting SentinelOne installation..."
-                            echo "    📥 Downloading SentinelOne installer (${SENTINELONE_PKG_NAME} from ${SENTINELONE_DOWNLOAD_LINK})..."
+                        if [ -n "$SENTINELONE_TOKEN" ]; then # Only check for token now
+                            echo "    🔑 Token provided. Attempting SentinelOne installation..."
+                            echo "    📥 Downloading SentinelOne installer (${SENTINELONE_PKG_NAME} from hardcoded URL)..."
                             
-                            if curl -L -o "/tmp/${SENTINELONE_PKG_NAME}" "${SENTINELONE_DOWNLOAD_LINK}"; then
+                            if curl -L -o "/tmp/${SENTINELONE_PKG_NAME}" "${S1_PKG_URL}"; then # Use hardcoded URL
                                 echo -e "    ${GREEN}✅ Download complete.${RESET}"
                                 
                                 echo "    📝 Creating token file for SentinelOne..."
-                                # Create the token file in /tmp first, then sudo move and chmod, or echo with sudo tee
                                 TMP_TOKEN_FILE="/tmp/com.sentinelone.registration-token-$RANDOM"
                                 echo "$SENTINELONE_TOKEN" > "$TMP_TOKEN_FILE"
-                                sudo mv "$TMP_TOKEN_FILE" "/tmp/com.sentinelone.registration-token" # Overwrite if exists
+                                sudo mv "$TMP_TOKEN_FILE" "/tmp/com.sentinelone.registration-token"
                                 sudo chmod 644 "/tmp/com.sentinelone.registration-token"
-                                sudo chown root "/tmp/com.sentinelone.registration-token" # Ensure root owns it for installer
+                                sudo chown root "/tmp/com.sentinelone.registration-token"
 
                                 echo "    🚀 Installing SentinelOne agent (this will require sudo password)..."
                                 if sudo /usr/sbin/installer -pkg "/tmp/${SENTINELONE_PKG_NAME}" -target /; then
                                     echo -e "    ${GREEN}✅ SentinelOne installation command executed.${RESET}"
                                     echo "    ⏳ Waiting a bit for agent to initialize..."
-                                    sleep 15 # Brief pause for agent to potentially register/start
+                                    sleep 15
                                     if check_sentinelone; then 
                                         echo -e "    ${GREEN}🎉 SentinelOne is now installed and detected!${RESET}"
                                     else
@@ -512,22 +511,20 @@ do_installation() {
                                 sudo rm -f "/tmp/com.sentinelone.registration-token"
                                 rm -f "/tmp/${SENTINELONE_PKG_NAME}"
                             else
-                                echo -e "    ${RED}❌ Failed to download SentinelOne installer from the provided link.${RESET}"
+                                echo -e "    ${RED}❌ Failed to download SentinelOne installer from the hardcoded URL: ${S1_PKG_URL}${RESET}"
                             fi
-                        else # No token/link provided
-                            echo -e "    ${YELLOW}⚠️ SentinelOne token and/or download link not provided. Installation via script skipped.${RESET}"
-                            echo -e "    ${YELLOW}   Please install SentinelOne via IT or provide --sentinelone-token and --sentinelone-link.${RESET}"
-                            # No explicit ((missing_tools++)) here as it's an optional install via script
+                        else # No token provided
+                            echo -e "    ${YELLOW}⚠️ SentinelOne token not provided. Installation via script skipped.${RESET}"
+                            echo -e "    ${YELLOW}   Please install SentinelOne via IT or provide --sentinelone-token.${RESET}"
                         fi
                     else # Already installed
                         echo -e "    ${GREEN}✅ SentinelOne already installed and detected.${RESET}"
                     fi
                 else
-                    # Fallback for other (future) security_verify_path types if any are added later
-                    echo -n "    " # Indent the output of check_application
+                    # Fallback for other security_verify_path types
+                    echo -n "    " 
                     if ! check_application "$app_path_name" "$display_name"; then 
                         echo -e "    ${YELLOW}ℹ️ Please install $display_name via IT if it is required and missing.${RESET}"
-                        # ((missing_tools++)) # Decide if generic uninstalled security_verify_path apps are errors
                     fi
                 fi
                 ;;
@@ -604,15 +601,6 @@ while [[ "$#" -gt 0 ]]; do
                 usage
             fi
             ;;
-        --sentinelone-link)
-            if [[ -n "$2" && "$2" != -* ]]; then
-                SENTINELONE_DOWNLOAD_LINK="$2"
-                shift 2
-            else
-                echo -e "${RED}❌ Error: --sentinelone-link option requires an argument.${RESET}" >&2
-                usage
-            fi
-            ;;
         --sentinelone-pkg-name)
             if [[ -n "$2" && "$2" != -* ]]; then
                 SENTINELONE_PKG_NAME="$2"
@@ -647,11 +635,9 @@ if ! $CERT_FLAG && ! $INSTALL_FLAG; then
 fi
 
 if $CERT_FLAG; then
-    # The initial announcement is now part of do_certification itself
     do_certification
 fi
 
 if $INSTALL_FLAG; then
-    echo -e "\n${GREEN}🚀 Performing installation for profile: ${YELLOW}$SELECTED_PROFILE...${RESET}" # Added emoji here
     do_installation
 fi
