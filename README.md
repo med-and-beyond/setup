@@ -12,14 +12,14 @@ This script helps set up a MacOS development environment by checking for and ins
 *   **Installation Mode**: Installs missing tools for the selected profile. This includes Automox (if an access key is provided) and SentinelOne (if a token is provided; download URL is fixed).
 *   **Profile-based Setup**: Supports different configurations for 'engineering', 'data', and 'other' user profiles. Defaults to 'other' if no profile is specified.
 
-### Requirements:
+### Requirements (MacOS):
 
 *   MacOS
 *   Internet connection
 *   Automox Access Key (if you intend to install Automox via this script).
 *   SentinelOne Token (if you intend to install SentinelOne via this script; the download URL is hardcoded in the script).
 
-### Usage:
+### Usage (MacOS):
 
 1.  **Clone the repository (optional, for local execution):**
     ```bash
@@ -28,74 +28,86 @@ This script helps set up a MacOS development environment by checking for and ins
     ```
 
 2.  **Run the script:**
+    *   Show Help: `./setup.sh --help`
+    *   Certification (Engineering): `./setup.sh --certification --profile engineering`
+    *   Install (Engineering, with keys): `./setup.sh --install --profile engineering --automox-key YOUR_AM_KEY --sentinelone-token YOUR_S1_TOKEN`
+    *(See script's `--help` for all options and detailed examples)*
 
-    *   **Show Help:**
-        ```bash
-        ./setup.sh --help
-        ```
+### Managed Tools (MacOS - Profile Dependent):
 
-    *   **Check missing tools for the 'engineering' profile:**
-        ```bash
-        ./setup.sh --certification --profile engineering
-        ```
-
-    *   **Check missing tools for the 'data' profile:**
-        ```bash
-        ./setup.sh --certification --profile data
-        ```
-
-    *   **Install tools for the 'data' profile (example with SentinelOne):**
-        ```bash
-        ./setup.sh --install --profile data --sentinelone-token YOUR_S1_TOKEN
-        ```
-
-    *   **Install tools for the 'engineering' profile, including Automox and SentinelOne:**
-        ```bash
-        ./setup.sh --install --profile engineering \
-                   --automox-key YOUR_AM_KEY \
-                   --sentinelone-token YOUR_S1_TOKEN \
-                   # --sentinelone-pkg-name "OptionalSentinelOneInstaller.pkg" # SentinelOne download URL is fixed
-        ```
-        *Using curl to run directly from GitHub (ensure you understand the security implications of passing keys/tokens this way):*
-        ```bash
-        # Note: Be cautious with direct curl execution if script asks for sudo or handles sensitive keys/tokens.
-        # Consider downloading and reviewing the script first if running with installation or keys/tokens.
-        curl -fsSL https://raw.githubusercontent.com/YOUR_ORG/YOUR_REPO/main/pc/mac/setup.sh | bash -s -- \
-           --install --profile engineering \
-           --automox-key YOUR_AM_KEY \
-           --sentinelone-token YOUR_S1_TOKEN
-        ```
-
-    *   **Check and Install in one command, including Automox and SentinelOne:**
-        ```bash
-        ./setup.sh -c -i --profile engineering \
-                   --automox-key YOUR_AM_KEY \
-                   --sentinelone-token YOUR_S1_TOKEN
-        ```
-        *(Note: `-c` is for `--certification`, `-i` is for `--install`)*
-
-### Managed Tools (Profile Dependent):
-
-*   **All Profiles (Baseline for 'other', 'engineering', 'data'):** Homebrew, Slack, Twingate, NordPass, Google Cloud SDK, jq.
-    *   *Security Verification/Installation:*
-        *   Automox (verification in cert mode; installation in install mode if `--automox-key` is provided)
-        *   SentinelOne (verification in cert mode; installation in install mode if `--sentinelone-token` is provided; download URL is fixed in the script)
+*   **All Profiles (Baseline):** Homebrew, Slack, Twingate, NordPass, Google Cloud SDK, jq.
+    *   *Security:* Automox (install with key), SentinelOne (install with token, fixed URL).
 *   **Data Profile (includes 'All' plus):** Cursor, DBeaver Community, Visual Studio Code.
 *   **Engineering Profile (includes 'All' and 'Data' tools plus):** k9s, GitHub CLI (gh), Docker, gkc.sh utility.
-    *(Note: Engineering effectively gets everything common, plus data-specific tools, plus its own specific tools)*
 
-### Important Notes:
+### Important Notes (MacOS):
 
-*   **Automox Installation**: Requires `--automox-key YOUR_KEY_HERE` during `--install`.
-*   **SentinelOne Installation**: Requires `--sentinelone-token YOUR_TOKEN` during `--install`. The download URL for the SentinelOne package is hardcoded in the script to `https://storage.googleapis.com/antidote-public-assets/sentinelone/Sentinel-Release-macos.pkg`. You can optionally specify `--sentinelone-pkg-name "filename.pkg"` if the actual installer filename differs from the default `SentinelOneInstaller.pkg` (though the hardcoded URL implies a specific file).
-*   The script may prompt for your password (`sudo`) for some installations (e.g., Automox, SentinelOne, creating symlinks).
-*   Restart your terminal after installation for all changes to take effect.
+*   Automox/SentinelOne installation requires respective keys/tokens.
+*   The script may prompt for `sudo` password.
+*   Restart terminal after installation.
 
-## Windows Setup (`pc/win/setup.ps1` - *Placeholder*)
+## Windows Setup (`pc/win/setup.ps1`)
 
-(Details for the Windows setup script will be added here once it's developed.)
+This script provides a foundational framework for setting up a Windows development environment with profile-based tool management. **It is currently in an initial development phase with placeholder logic for most checks and installations.**
+
+### Features (Windows - Planned):
+
+*   **Certification Mode**: Checks for tool presence (current implementation is basic).
+*   **Installation Mode**: Installs tools (current implementation is basic, targeting Chocolatey for many tools).
+*   **Profile-based Setup**: Supports 'engineering', 'data', and 'other' user profiles.
+*   Parameter handling for Automox key and SentinelOne token (specific Windows installation methods for these are TBD).
+
+### Requirements (Windows):
+
+*   Windows 10/11 (PowerShell 5.1+ recommended).
+*   Internet connection.
+*   **Administrator Privileges**: Highly recommended, and likely required for many installations (e.g., Chocolatey installation, system-wide tools, services).
+*   **PowerShell Execution Policy**: May need to be adjusted to run scripts. A common setting is `RemoteSigned` for the current user.
+
+### How to Run (Windows):
+
+1.  **Ensure Execution Policy Allows Scripts:**
+    *   Open PowerShell.
+    *   Check current policy: `Get-ExecutionPolicy -Scope CurrentUser` (or `Get-ExecutionPolicy -List` to see all scopes).
+    *   If 'Restricted', change it (you might need to open PowerShell as Administrator to change policies, even for `CurrentUser` scope sometimes, depending on system configuration):
+        ```powershell
+        Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+        ```
+        *(Answer `Y` or `A` if prompted, though `-Force` should suppress it.)*
+
+2.  **Navigate to the Script Directory:**
+    *   Open PowerShell.
+    *   Example: `cd C:\path\to\antidote\setup\pc\win`
+
+3.  **Run the Script:**
+    *   **Show Help:**
+        ```powershell
+        .\setup.ps1 -Help
+        ```
+    *   **Run Certification (Engineering Profile - current checks are basic):**
+        ```powershell
+        .\setup.ps1 -Certification -Profile engineering
+        ```
+    *   **Run Installation (Data Profile, with SentinelOne token - current installs are basic placeholders):**
+        ```powershell
+        .\setup.ps1 -Install -Profile data -SentinelOneToken YOUR_S1_TOKEN
+        ```
+
+### Managed Tools (Windows - Conceptual List, Installation Methods TBD/Placeholder):
+
+*   **All Profiles:** Chocolatey (as package manager), Google Cloud SDK, jq, Slack, Twingate, NordPass.
+    *   *Security:* Automox, SentinelOne (Windows installation methods need specific, token/key-based silent installer commands).
+*   **Data Profile (includes 'All' plus):** Cursor, DBeaver Community, Visual Studio Code.
+*   **Engineering Profile (includes 'All' plus):** k9s, GitHub CLI (gh), Docker Desktop.
+    *(Note: The specific methods for checking and installing these on Windows, especially silently/automated, need to be implemented. Chocolatey is a primary candidate where possible.)*
+
+### Important Notes (Windows):
+
+*   **Under Development**: This script is a starting point. Most application check and installation commands are **placeholders** and need to be implemented with Windows-specific methods (e.g., Chocolatey package names, direct installer silent switches, PowerShell modules for configuration).
+*   **Chocolatey**: Installation of Chocolatey itself should be added as a foundational step if it's to be used as the main package manager.
+*   **Admin Rights**: Running PowerShell as Administrator is strongly recommended for the `-Install` functionality.
+*   **Tool-Specific Installers**: For tools not in Chocolatey or requiring complex setups (like Google Cloud SDK, Automox, SentinelOne on Windows), their specific silent installer commands and configuration methods need to be researched and integrated.
 
 ---
 
-Please replace `YOUR_ORG/YOUR_REPO` in the `curl` commands with the actual path to your repository if you intend to use the direct curl execution method.
-Be mindful of security when executing scripts directly from the internet, especially those that handle keys or require elevated privileges.
+Replace `YOUR_ORG/YOUR_REPO` in `curl` commands (MacOS section) if using direct execution. Be mindful of security when executing scripts directly from the internet, especially those that handle keys or require elevated privileges.
