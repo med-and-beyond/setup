@@ -189,7 +189,7 @@ if ($Help) {
     Show-Usage
 }
 
-Write-HostColorized "ℹ️ Selected profile: $($Profile.ToUpper())" $ColorBlue
+Write-HostColorized "Selected profile: $($Profile.ToUpper())" $ColorBlue
 
 if (-not $Certification -and -not $Install) {
     Write-HostColorized "[ERROR] No action specified (e.g., -Certification or -Install)." $ColorRed
