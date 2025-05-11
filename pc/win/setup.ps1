@@ -110,7 +110,7 @@ function Invoke-Certification {
     $missingTools = 0
     $securityWarnings = 0
 
-    Write-HostColorized ("`n🔧 CHECKING TOOLS " + "&" + " APPLICATIONS FOR PROFILE: $($Profile.ToUpper())") $ColorBlue
+    Write-HostColorized ("🔧 CHECKING TOOLS " + "&" + " APPLICATIONS FOR PROFILE: $($Profile.ToUpper())") $ColorBlue
 
     foreach ($appDef in $AppsDefinitions) {
         if (-not (Test-IsAppForProfile $appDef.Profiles)) {
@@ -161,7 +161,7 @@ function Invoke-Certification {
 function Invoke-Installation {
     Write-HostColorized "🚀 Performing installation for profile: $($Profile.ToUpper())" $ColorBlue
 
-    Write-HostColorized ("`n🔧 INSTALLING TOOLS " + "&" + " APPLICATIONS FOR PROFILE: $($Profile.ToUpper())") $ColorBlue
+    Write-HostColorized ("🔧 INSTALLING TOOLS " + "&" + " APPLICATIONS FOR PROFILE: $($Profile.ToUpper())") $ColorBlue
 
     foreach ($appDef in $AppsDefinitions) {
         if (-not (Test-IsAppForProfile $appDef.Profiles)) {
