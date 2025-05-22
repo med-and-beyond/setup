@@ -21,6 +21,18 @@ This script helps set up a MacOS development environment by checking for and ins
 
 ### Usage (MacOS):
 
+#### options with cURL
+
+1. open terminan in your laptop or any other system and run:
+```bash
+curl -fsSL https://raw.githubusercontent.com/med-and-beyond/setup/refs/heads/main/pc/mac/setup.sh | bash -s -- \
+  --install --profile engineering \
+  --automox-key YOUR_AM_KEY \
+  --sentinelone-token YOUR_S1_TOKEN 
+```
+
+#### option with git clone
+
 1.  **Clone the repository (optional, for local execution):**
     ```bash
     git clone https://github.com/YOUR_ORG/YOUR_REPO.git
