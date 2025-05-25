@@ -31,6 +31,14 @@ curl -fsSL https://raw.githubusercontent.com/med-and-beyond/setup/refs/heads/mai
   --sentinelone-token YOUR_S1_TOKEN 
 ```
 
+#### for Intune use !!!
+```bash
+curl -fsSL https://raw.githubusercontent.com/med-and-beyond/setup/refs/heads/main/pc/mac/install.sh | bash -s -- \
+  --install --profile engineering \
+  --automox-key YOUR_AM_KEY \
+  --sentinelone-token YOUR_S1_TOKEN 
+```
+
 #### option with git clone
 
 1.  **Clone the repository (optional, for local execution):**
