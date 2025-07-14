@@ -49,6 +49,9 @@ APPS_DEFINITIONS=(
     "automox;Automox;security_verify_ps;all;;;amagent"
 )
 
+# Add this near the top with other global variables
+AUTO_AUTH_GCLOUD=false
+
 # --- Function Definitions (usage, check_*, do_certification, do_installation) ---
 # NOTE: The actual definitions of these functions are assumed to be present above the main script logic.
 # The following is where the main script logic (parsing and execution) begins.
@@ -70,6 +73,7 @@ Options:
     --automox-key <key>         Specify the Automox access key for installation.
     --sentinelone-token <token> Specify the SentinelOne registration token for installation.
     --sentinelone-pkg-name <name> (Optional) Specify the SentinelOne PKG filename (defaults to SentinelOneInstaller.pkg).
+    --auto-auth-gcloud          Automatically authenticate with Google Cloud for gkc.sh installation.
 
 Examples:
     $0 --help
@@ -334,8 +338,17 @@ do_installation() {
             cli)
                 if ! check_command "$cmd_name" "$display_name" &>/dev/null; then # Check silently
                     echo "    Installing $display_name ($cmd_name)..."
-                    brew install "$brew_name"
-                    if ! check_command "$cmd_name" "$display_name"; then echo -e "    ${RED}❌ $display_name installation failed.${RESET}"; else echo -e "    ${GREEN}✅ $display_name installed.${RESET}"; fi
+                    if ! brew install "$brew_name"; then
+                        echo -e "    ${RED}❌ Failed to install $display_name via brew. Trying to update brew and retry...${RESET}"
+                        brew update
+                        if ! brew install "$brew_name"; then
+                            echo -e "    ${RED}❌ $display_name installation failed after brew update.${RESET}"
+                        else
+                            echo -e "    ${GREEN}✅ $display_name installed after brew update.${RESET}"
+                        fi
+                    else
+                        echo -e "    ${GREEN}✅ $display_name installed.${RESET}"
+                    fi
                     if [[ "$id" == "gh" ]]; then echo -e "    ${YELLOW}🔔 Please run 'gh auth login' to authenticate with GitHub.${RESET}"; fi
                 else
                     echo -e "    ${GREEN}✅ $display_name already installed.${RESET}"
@@ -459,20 +472,57 @@ do_installation() {
                 # gkc.sh installation, depends on gcloud being installed first
                 GCLOUD_SDK_PATH="${HOME}/Applications/google-cloud-sdk"
                 GSUTIL_BIN="${GCLOUD_SDK_PATH}/bin/gsutil"
-                GKC_SH_TARGET_PATH="$app_path_name" # This is the full path like ~/Applications/google-cloud-sdk/bin/gkc.sh
+                GKC_SH_TARGET_PATH="$app_path_name"
                 GSUTIL_CMD=$(which gsutil || echo "$GSUTIL_BIN")
+                GCLOUD_CMD=$(which gcloud || echo "${GCLOUD_SDK_PATH}/bin/gcloud")
 
                 if [ -x "$GSUTIL_CMD" ]; then
                     if [ ! -f "$GKC_SH_TARGET_PATH" ]; then 
                         echo "    Installing $display_name..."
-                        # Ensure directory exists
-                        mkdir -p "${GKC_SH_TARGET_PATH%/*}"
-                        "$GSUTIL_CMD" cp "gs://adh-tools/gkc.sh" "${GKC_SH_TARGET_PATH%/*}/"
-                        chmod u+x "$GKC_SH_TARGET_PATH"
-                        if [ -L /usr/local/bin/gkc.sh ] || [ ! -e /usr/local/bin/gkc.sh ]; then
-                            sudo ln -sf "$GKC_SH_TARGET_PATH" /usr/local/bin/gkc.sh
+                        echo "    🔐 Checking Google Cloud authentication..."
+                        
+                        # Check if user is authenticated
+                        if ! "$GSUTIL_CMD" ls gs://adh-tools/ &>/dev/null; then
+                            echo -e "    ${YELLOW}⚠️ Google Cloud authentication required for $display_name installation.${RESET}"
+                            echo -e "    ${BLUE}Would you like to authenticate with Google Cloud now? (y/n)${RESET}"
+                            read -r auth_response
+                            
+                            if [[ "$auth_response" =~ ^[Yy]$ ]]; then
+                                echo "    🔑 Running Google Cloud authentication..."
+                                if [ -x "$GCLOUD_CMD" ]; then
+                                    "$GCLOUD_CMD" auth login
+                                    # Wait a moment for auth to propagate
+                                    sleep 2
+                                    # Try again after authentication
+                                    if ! "$GSUTIL_CMD" ls gs://adh-tools/ &>/dev/null; then
+                                        echo -e "    ${RED}❌ Authentication completed but still cannot access gs://adh-tools/. Skipping $display_name installation.${RESET}"
+                                        continue
+                                    fi
+                                else
+                                    echo -e "    ${RED}❌ gcloud command not found. Cannot authenticate.${RESET}"
+                                    continue
+                                fi
+                            else
+                                echo -e "    ${YELLOW}⚠️ Skipping $display_name installation. You can install it later after running 'gcloud auth login'.${RESET}"
+                                continue
+                            fi
                         fi
-                        if [ -f "$GKC_SH_TARGET_PATH" ]; then echo -e "    ${GREEN}✅ $display_name installed.${RESET}"; else echo -e "    ${RED}❌ $display_name installation failed.${RESET}"; fi
+                        
+                        # Proceed with installation
+                        mkdir -p "${GKC_SH_TARGET_PATH%/*}"
+                        if "$GSUTIL_CMD" cp "gs://adh-tools/gkc.sh" "${GKC_SH_TARGET_PATH%/*}/"; then
+                            chmod u+x "$GKC_SH_TARGET_PATH"
+                            if [ -L /usr/local/bin/gkc.sh ] || [ ! -e /usr/local/bin/gkc.sh ]; then
+                                sudo ln -sf "$GKC_SH_TARGET_PATH" /usr/local/bin/gkc.sh
+                            fi
+                            if [ -f "$GKC_SH_TARGET_PATH" ]; then 
+                                echo -e "    ${GREEN}✅ $display_name installed.${RESET}" 
+                            else 
+                                echo -e "    ${RED}❌ $display_name installation failed.${RESET}"
+                            fi
+                        else
+                            echo -e "    ${RED}❌ Failed to download $display_name from Google Cloud Storage.${RESET}"
+                        fi
                     else
                         echo -e "    ${GREEN}✅ $display_name already installed.${RESET}"
                     fi
@@ -629,6 +679,19 @@ while [[ "$#" -gt 0 ]]; do
                 shift 2
             else
                 echo -e "${RED}❌ Error: --sentinelone-pkg-name option requires an argument.${RESET}" >&2
+                usage
+            fi
+            ;;
+        --auto-auth-gcloud)
+            AUTO_AUTH_GCLOUD=true
+            shift
+            ;;
+        --gcloud-service-account-key)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                GCLOUD_SERVICE_ACCOUNT_KEY="$2"
+                shift 2
+            else
+                echo -e "${RED}❌ Error: --gcloud-service-account-key option requires a file path.${RESET}" >&2
                 usage
             fi
             ;;
