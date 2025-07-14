@@ -303,8 +303,48 @@ do_certification() {
 do_installation() {
     echo -e "${BLUE}🚀 Performing installation for profile: ${YELLOW}$SELECTED_PROFILE${RESET}"
 
-    # Removed directory permission checks as per user request
-    # Original checks for /usr/local/share/zsh and /usr/local/share/zsh/site-functions deleted.
+    # Check and fix directory permissions for zsh completion
+    echo -e "\n${BLUE}🔧 Checking directory permissions for shell completion...${RESET}"
+    
+    # Check if zsh directories exist and have correct permissions
+    ZSH_DIRS=("/usr/local/share/zsh" "/usr/local/share/zsh/site-functions")
+    NEED_PERMISSION_FIX=false
+    
+    for dir in "${ZSH_DIRS[@]}"; do
+        if [ -d "$dir" ]; then
+            if [ ! -w "$dir" ]; then
+                echo -e "    ${YELLOW}⚠️ Directory $dir exists but is not writable${RESET}"
+                NEED_PERMISSION_FIX=true
+            fi
+        else
+            echo -e "    ${YELLOW}⚠️ Directory $dir does not exist${RESET}"
+            NEED_PERMISSION_FIX=true
+        fi
+    done
+    
+    if [ "$NEED_PERMISSION_FIX" = true ]; then
+        echo -e "    ${BLUE}🔧 Fixing directory permissions for Homebrew shell completion...${RESET}"
+        
+        # Create directories if they don't exist
+        for dir in "${ZSH_DIRS[@]}"; do
+            if [ ! -d "$dir" ]; then
+                echo "    Creating directory: $dir"
+                sudo mkdir -p "$dir"
+            fi
+        done
+        
+        # Fix ownership
+        echo "    Fixing ownership of zsh directories..."
+        sudo chown -R "$(whoami)" "${ZSH_DIRS[@]}"
+        
+        # Fix permissions
+        echo "    Fixing permissions of zsh directories..."
+        chmod u+w "${ZSH_DIRS[@]}"
+        
+        echo -e "    ${GREEN}✅ Directory permissions fixed${RESET}"
+    else
+        echo -e "    ${GREEN}✅ Directory permissions are correct${RESET}"
+    fi
 
     if [ "$(id -u)" = "0" ]; then
         echo -e "${RED}❌ ERROR: This script should not be run as root or with sudo directly.${RESET}"
