@@ -34,19 +34,23 @@ APPS_DEFINITIONS=(
 
     # Cask applications
     "docker;Docker;cask;engineering;docker;Docker;"
-    "slack;Slack;cask;all;slack;Slack;"
-    "twingate;Twingate;cask;all;twingate;Twingate;"
-    "nordpass;NordPass;cask;all;nordpass;NordPass;"
+    "slack;Slack;cask;all,tech-support;slack;Slack;"
+    "twingate;Twingate;cask;all,tech-support;twingate;Twingate;"
+    "nordpass;NordPass;cask;all,tech-support;nordpass;NordPass;"
     "cursor;Cursor;cask;engineering,data;cursor;Cursor;"
-    "dbeaver-community;DBeaver Community;cask;engineering,data;dbeaver-community;DBeaver;"
+    "dbeaver-community;DBeaver Community;cask;engineering,data,tech-support;dbeaver-community;DBeaver;"
     "visual-studio-code;Visual Studio Code;cask;engineering,data;visual-studio-code;Visual Studio Code;"
+    
+    # Tech Support specific applications
+    "microsoft-teams;Microsoft Teams;cask;tech-support;microsoft-teams;Microsoft Teams;"
+    "microsoft-outlook;Microsoft Outlook;cask;tech-support;microsoft-outlook;Microsoft Outlook;"
 
     # gkc.sh - Depends on gcloud SDK (specifically gsutil) being installed
     "gkc;gkc.sh;gcloud_util;engineering;;${HOME}/Applications/google-cloud-sdk/bin/gkc.sh;gkc.sh"
 
-    # Security Verification/Installation
-    "sentinelone;SentinelOne;security_verify_path;all;;SentinelOne/SentinelOne Extensions;"
-    "automox;Automox;security_verify_ps;all;;;amagent"
+    # Security Verification/Installation - Now explicitly including tech-support
+    "sentinelone;SentinelOne;security_verify_path;all,tech-support;;SentinelOne/SentinelOne Extensions;"
+    "automox;Automox;security_verify_ps;all,tech-support;;;amagent"
 )
 
 # Add this near the top with other global variables
@@ -69,7 +73,7 @@ Options:
     -h, --help                      Show this help message
     -c, --certification           Check and notify what tools are missing
     -i, --install                 Install all required tools
-    --profile <name>            Specify user profile (engineering, data, or other). Defaults to 'other'.
+    --profile <name>            Specify user profile (engineering, data, tech-support, or other). Defaults to 'other'.
     --automox-key <key>         Specify the Automox access key for installation.
     --sentinelone-token <token> Specify the SentinelOne registration token for installation.
     --sentinelone-pkg-name <name> (Optional) Specify the SentinelOne PKG filename (defaults to SentinelOneInstaller.pkg).
@@ -79,7 +83,8 @@ Examples:
     $0 --help
     $0 --certification --profile engineering
     $0 --certification --profile data
-    $0 --install --profile data --sentinelone-token YOUR_S1_TOKEN
+    $0 --certification --profile tech-support
+    $0 --install --profile tech-support --automox-key YOUR_AUTOMOX_KEY --sentinelone-token YOUR_S1_TOKEN
 
 This script will manage the installation and verification of tools
 based on the selected profile. SentinelOne download URL is fixed.
@@ -691,7 +696,7 @@ while [[ "$#" -gt 0 ]]; do
                 SELECTED_PROFILE="$2"
                 shift 2
             else
-                echo -e "${RED}❌ Error: --profile option requires an argument (engineering, data, or other).${RESET}" >&2
+                echo -e "${RED}❌ Error: --profile option requires an argument (engineering, data, tech-support, or other).${RESET}" >&2
                 usage
             fi
             ;;
@@ -748,8 +753,8 @@ done
 
 # Validate SELECTED_PROFILE
 echo -e "${BLUE}ℹ️ Selected profile: ${YELLOW}$SELECTED_PROFILE${RESET}"
-if [[ "$SELECTED_PROFILE" != "engineering" && "$SELECTED_PROFILE" != "other" && "$SELECTED_PROFILE" != "data" ]]; then
-    echo -e "${RED}❌ Error: Invalid profile '$SELECTED_PROFILE'. Choose 'engineering', 'data', or 'other'.${RESET}" >&2
+if [[ "$SELECTED_PROFILE" != "engineering" && "$SELECTED_PROFILE" != "other" && "$SELECTED_PROFILE" != "data" && "$SELECTED_PROFILE" != "tech-support" ]]; then
+    echo -e "${RED}❌ Error: Invalid profile '$SELECTED_PROFILE'. Choose 'engineering', 'data', 'tech-support', or 'other'.${RESET}" >&2
     usage
 fi
 
