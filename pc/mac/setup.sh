@@ -29,8 +29,8 @@ APPS_DEFINITIONS=(
     # CLI tools
     "jq;jq;cli;all;jq;;jq"
     "gh;GitHub CLI;cli;engineering;gh;;gh"
-    # k9s - Logically comes after gcloud/kubectl setup though not a hard dependency for k9s install itself
-    "k9s;k9s;cli;engineering;k9s;;k9s"
+    # k9s - Using the official derailed/k9s tap for latest version
+    "k9s;k9s;cli;engineering;derailed/k9s/k9s;;k9s"
 
     # Cask applications
     "docker;Docker;cask;engineering;docker;Docker;"
